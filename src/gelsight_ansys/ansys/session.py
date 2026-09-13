@@ -97,6 +97,11 @@ class AnsysSession:
             timeout=60,
             cleanup_on_exit=True,
             set_no_abort=False,
+            # PyMAPDL clears the session on connect unless told not to, and
+            # /CLEAR rewrites gel.ldhi - the index of restart points - and
+            # truncates gel.rst. A resumed session must connect to the files
+            # exactly as the interrupted run left them.
+            clear_on_connect=not self.restart,
             log_apdl=str(
                 self.directory
                 / (

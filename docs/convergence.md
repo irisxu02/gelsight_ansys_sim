@@ -170,8 +170,19 @@ sample interval. A slide window sampled every 0.05 s with 0.005 s checkpoints
 puts ten load steps between frames.
 
 A solve also runs on past its last saved frame before it fails, so the count has
-to cover the frame-to-frame gap and then some. Too few and every resume fails
-the same way, with everything else about it correct:
+to cover the frame-to-frame gap and then some.
+
+The files are not enough on their own. `gel.ldhi` is the index that maps load
+steps to `.rNNN` files, and MAPDL rewrites it - and truncates `gel.rst` - on
+`/CLEAR`. PyMAPDL issues `/CLEAR,NOSTART` on every connection unless told not
+to (`clear_on_connect`), so a resumed session that connects the ordinary way
+wipes the restart set before `RESUME,gel,rdb` is ever sent. The twenty-four
+`.rNNN` files are still on disk; `RESCONTROL,FILE_SUMMARY` lists two of them.
+Resumed sessions connect without clearing, and the restart point is checked
+against the summary before `ANTYPE,,REST` is issued, so a missing one fails
+with the list of what exists instead of hanging on a solver that has exited.
+Too few retained files, or a cleared index, fail the same way, with everything
+else about the resume correct:
 
 ```
 *** ERROR ***

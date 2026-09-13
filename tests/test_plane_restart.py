@@ -48,6 +48,68 @@ def release_config(config):
     )
 
 
+FILE_SUMMARY = """
+ RESTART FILE INFO - FILENAME: gel.r001
+ LOADSTEP  SUBSTEP  BEGINNING TIME  CURRENT TIME    END TIME
+     178      107       5.1550           5.1600       5.1600
+ /INPUT FILE=    LINE=       0
+ FINISH SOLUTION PROCESSING
+ RESTART FILE INFO - FILENAME: gel.r002
+ LOADSTEP  SUBSTEP  BEGINNING TIME  CURRENT TIME    END TIME
+       2       13       2.0000           2.0200       2.0200
+ ***** ROUTINE COMPLETED *****  CP =         0.000
+"""
+
+
+class RestartIndexTests(unittest.TestCase):
+    """What ANTYPE,,REST can reach is what the index lists, not what is on disk."""
+
+    def test_the_summary_is_read_as_load_step_substep_pairs(self):
+        from gelsight_ansys.plane_mechanics import restart_points
+
+        # Twenty-four .rNNN files were on disk when this was captured; the
+        # index, rewritten by a /CLEAR on connect, remembered two of them.
+        self.assertEqual(restart_points(FILE_SUMMARY), [(178, 107), (2, 13)])
+        self.assertEqual(restart_points(""), [])
+        self.assertNotIn((176, 60), restart_points(FILE_SUMMARY))
+
+
+class ResumedSessionTests(unittest.TestCase):
+    """A resumed session must connect to the files as the run left them."""
+
+    def launch_kwargs(self, restart):
+        import types
+
+        recorded = {}
+
+        def fake_launch(**kwargs):
+            recorded.update(kwargs)
+            return Mock()
+
+        fake = types.SimpleNamespace(launch_mapdl=fake_launch)
+        config = Config.load(ROOT / "configs/material_plane_slide/rigid_reference.json")
+        with tempfile.TemporaryDirectory() as tmp:
+            exe = Path(tmp) / "ANSYS252.exe"
+            exe.write_bytes(b"")
+            with patch.dict(sys.modules, {"ansys": types.SimpleNamespace(mapdl=types.SimpleNamespace(core=fake)),
+                                          "ansys.mapdl": types.SimpleNamespace(core=fake),
+                                          "ansys.mapdl.core": fake}), patch.object(
+                AnsysPlane, "build", lambda self: None
+            ):
+                with AnsysPlane(config, Path(tmp) / "solver", executable=exe, restart=restart):
+                    pass
+        return recorded
+
+    def test_a_fresh_session_clears_and_a_resumed_one_does_not(self):
+        # PyMAPDL's /CLEAR on connect rewrites gel.ldhi and truncates gel.rst,
+        # which is the restart set a resume exists to continue from.
+        self.assertTrue(self.launch_kwargs(None)["clear_on_connect"])
+        from gelsight_ansys.plane_restart import PlaneRestart
+
+        point = PlaneRestart(176, 60, 32, 3.15)
+        self.assertFalse(self.launch_kwargs(point)["clear_on_connect"])
+
+
 class PlaneRestartTests(unittest.TestCase):
     def fixture(self, root):
         config = Config.load(

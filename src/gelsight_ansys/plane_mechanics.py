@@ -340,7 +340,7 @@ class AnsysPlane(AnsysSession):
         self.previous_solver_time = expected_time
         # gel.rdb carries the controls written when the model was first built, so
         # a changed tolerance only reaches the solver if it is restated here.
-        self.command_block(
+        listing = self.command_block(
             [
                 "FINISH",
                 "/SOLU",
@@ -351,6 +351,18 @@ class AnsysPlane(AnsysSession):
             ],
             "restart_files",
         )
+        # ANTYPE,,REST against a load step the index does not hold is a fatal
+        # error that leaves the solver gone and the gRPC channel waiting on it.
+        # Ask first, and fail with what exists.
+        available = restart_points(str(listing))
+        wanted = (point.load_step, point.substep)
+        if wanted not in available:
+            raise RuntimeError(
+                f"Restart point load step {wanted[0]} substep {wanted[1]} is not in "
+                f"the solver's restart index; it holds {available or 'nothing'}. "
+                "The index (gel.ldhi) is rewritten by /CLEAR and holds at most "
+                "RESCONTROL's MAXFILES load steps."
+            )
 
     def solve_interval(self, physical_pose):
         """Yield every converged substep, in order, with an explicit physical time."""
@@ -697,6 +709,27 @@ def contact_damping_commands(indenter, contact_type, number=1):
         activation = DAMPING_ACTIVATION[indenter.stabilization_damping_activation]
         commands.append(f"KEYOPT,{contact_type},15,{activation}")
     return commands
+
+
+def restart_points(listing):
+    """(load step, substep) pairs that RESCONTROL,FILE_SUMMARY reports.
+
+    Each entry is a FILENAME line, a LOADSTEP/SUBSTEP header, and one row of
+    numbers. Only the index decides what ANTYPE,,REST can reach; files on disk
+    that the index has forgotten do not count.
+    """
+    points, expect_row = [], False
+    for line in str(listing).splitlines():
+        fields = line.split()
+        if expect_row and len(fields) >= 5:
+            try:
+                points.append((int(fields[0]), int(fields[1])))
+            except ValueError:
+                pass
+            expect_row = False
+        elif fields[:2] == ["LOADSTEP", "SUBSTEP"]:
+            expect_row = True
+    return points
 
 
 def solution_control_commands(solver):
