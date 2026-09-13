@@ -226,7 +226,13 @@ class PlaneRestartTests(unittest.TestCase):
             self.assertEqual(
                 (point.load_step, point.substep, point.time_s), (1, 100, 0.0)
             )
-            self.assertEqual(len(continued.trajectory), 81)
+            # 0.1 s frames over 8 s, joined with the slide window's own 0.01 s.
+            coarse = np.linspace(0, 8, 81)
+            w = continued.specification.transient_windows[0]
+            fine = np.linspace(w["start_time_s"], w["end_time_s"],
+                               round((w["end_time_s"] - w["start_time_s"]) / w["sample_interval_s"]) + 1)
+            expected = len(np.unique(np.round(np.concatenate([coarse, fine]), 12)))
+            self.assertEqual(len(continued.trajectory), expected)
             with self.assertRaisesRegex(ValueError, "solver"):
                 validate_plane_resume(root, continued.with_solver(cores=3))
             case = PlaneCase(continued.specification.suite, continued.specification.case)

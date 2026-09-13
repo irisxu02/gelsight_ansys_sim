@@ -153,8 +153,9 @@ See [sampling CLI options](usage.md#mechanical-steps-and-saved-frames).
 
 ## Control modes
 
-The shipped presets share `suite.json`, which commands a normal *load* of 5 N
-and solves quasi-statically. Load rather than travel is what makes the material
+The shipped presets share `suite.json`, which commands a normal *load* of 5 N,
+accelerates into the slide, and integrates the slide with mass (see
+`protocol.transient`). Load rather than travel is what makes the material
 comparison a comparison: equal travel is not equal load, so a travel-driven
 protocol compares materials at different forces and has to be refitted per
 material. Under load control one protocol transfers to every specimen and the
@@ -162,15 +163,10 @@ travel each needs is recorded (`platen_travel_m`) instead of set. Contact is
 still closed by a short travel-driven preload, which must stay below the target
 on the stiffest specimen; `protocol.normal_control` switches the mode.
 
-One capability example sits beside the presets on its own setup:
-
-| Example | Setup | For |
-|---|---|---|
-| `soft_rubber_transient.json` | `suite_transient.json` | Integrating the slide onset with mass, for stick-slip and for contact events a quasi-static solve cannot pass |
-
-It carries `"status": "capability_example"` so preset discovery and export leave
-it alone. [Convergence](convergence.md) explains both control modes and how to
-size a transient window.
+[Convergence](convergence.md) explains both control modes, why the slide is
+integrated with mass, and how to size a transient window. A case that ships as
+a worked example rather than a dataset preset can carry
+`"status": "capability_example"`, which preset discovery and export leave alone.
 
 ## Custom object meshes
 

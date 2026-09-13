@@ -14,6 +14,22 @@ from gelsight_ansys.simulation_config import config_for_plane
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def expected_count(case, coarse_step, key):
+    """Frames or checkpoints: the coarse grid joined with each window's own.
+
+    The suite integrates the slide with mass, and a window keeps its own
+    sampling and checkpoint grid whatever the dataset-level interval is, so
+    coarsening the CLI interval thins only the quasi-static stretches.
+    """
+    start, end = case.suite["protocol"]["recorded_interval_s"]
+    grids = [np.linspace(start, end, round((end - start) / coarse_step) + 1)]
+    for w in case.transient_windows:
+        step = w.get(key, w["time_increment_s"] if key == "solve_interval_s" else None)
+        if step is not None:
+            a, b = w["start_time_s"], w["end_time_s"]
+            grids.append(np.linspace(a, b, round((b - a) / step) + 1))
+    return len(np.unique(np.round(np.concatenate(grids), 12)))
+
 class PlaneMeshTests(unittest.TestCase):
     def case(self, name):
         return PlaneCase.load(ROOT / f"configs/material_plane_slide/{name}.json")
@@ -40,7 +56,8 @@ class PlaneMeshTests(unittest.TestCase):
         reference = case.solve_times.copy()
         original = config_for_plane(case)
         sampled = original.with_plane_sampling(sample_interval_s=0.05)
-        self.assertEqual(len(sampled.trajectory), 121)
+        frames = expected_count(case, 0.05, "sample_interval_s")
+        self.assertEqual(len(sampled.trajectory), frames)
         np.testing.assert_array_equal(sampled.specification.solve_times, reference)
         self.assertEqual(len(original.trajectory), 601)
         self.assertEqual(sampled.solver, original.solver)
@@ -51,16 +68,18 @@ class PlaneMeshTests(unittest.TestCase):
         )
         case.suite["dataset"].update(solve_interval_s=0.01, sample_interval_s=0.05)
         case.validate()
-        self.assertEqual(len(case.frame_times), 121)
+        self.assertEqual(len(case.frame_times), frames)
         np.testing.assert_array_equal(case.solve_times, reference)
         config = config_for_plane(case)
-        self.assertEqual(len(config.trajectory), 121)
+        self.assertEqual(len(config.trajectory), frames)
         np.testing.assert_array_equal(
             Config.from_dict(config.to_dict()).specification.solve_times, reference
         )
         case.suite["dataset"].update(solve_interval_s=0.02, sample_interval_s=0.02)
         case.validate()
-        self.assertEqual(len(case.solve_times), 301)
+        self.assertEqual(
+            len(case.solve_times), expected_count(case, 0.02, "solve_interval_s")
+        )
         self.assertTrue(
             all(
                 p["time_s"] in case.solve_times

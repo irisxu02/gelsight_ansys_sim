@@ -45,7 +45,8 @@
   "model_notes": [
     "One-term compressible hyperfoam with provisional shear and bulk relaxation.",
     "No permanent crushing, pore-fluid transport, or resolved foam cells.",
-    "The adapter must verify the exact ANSYS hyperfoam coefficient convention and Prony compatibility."
+    "The adapter must verify the exact ANSYS hyperfoam coefficient convention and Prony compatibility.",
+    "At the shared 5 N this 3 mm slab compresses by about 1.6 mm, and in the hold after the press its Ogden elements distort as the Prony branches relax under constant load. Whether that is the material, the slab thickness or the load is a question about the specimen, not the solver."
   ],
   "expected_observables": [
     "normal_force_vs_travel",

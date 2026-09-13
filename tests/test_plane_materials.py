@@ -178,7 +178,8 @@ class PlaneMaterialTests(unittest.TestCase):
             # to stay under the target load on the stiffest specimen.
             self.assertEqual(case.pose(0)["normal_travel_m"], 3e-05)
             self.assertEqual(case.pose(2)["normal_force_n"], 5.0)
-            self.assertEqual(case.pose(5)["x_m"], 0.01)
+            self.assertEqual(case.pose(6)["x_m"], 0.01)
+            self.assertLess(case.pose(5)["x_m"], 0.01)
         for path, data in sources.items():
             setup = data.get("setup")
             if setup is None or setup == "suite.json":

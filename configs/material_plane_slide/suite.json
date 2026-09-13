@@ -34,7 +34,8 @@
       "young_pa": 100000,
       "poisson": 0.49,
       "mooney_fraction": 0.2,
-      "formulation": "displacement"
+      "formulation": "displacement",
+      "density_kg_m3": 1100
     },
     "camera": {
       "width_px": 320,
@@ -177,12 +178,14 @@
       {
         "name": "slide_at_fixed_compression",
         "start_time_s": 3,
-        "end_time_s": 5,
-        "speed_m_s": 0.005
+        "end_time_s": 5.1,
+        "speed_m_s": 0.005,
+        "acceleration_m_s2": 0.025,
+        "distance_m": 0.01
       },
       {
         "name": "hold_after_slide",
-        "start_time_s": 5,
+        "start_time_s": 5.1,
         "end_time_s": 6
       }
     ],
@@ -223,46 +226,88 @@
         "normal_force_n": 5.0
       },
       {
-        "time_s": 3,
-        "x_m": 0,
+        "time_s": 3.0,
         "y_m": 0,
         "twist_rad": 0,
-        "normal_force_n": 5.0
+        "normal_force_n": 5.0,
+        "x_m": 0.0
+      },
+      {
+        "time_s": 3.01,
+        "y_m": 0,
+        "twist_rad": 0,
+        "normal_force_n": 5.0,
+        "x_m": 1.25e-06
+      },
+      {
+        "time_s": 3.02,
+        "y_m": 0,
+        "twist_rad": 0,
+        "normal_force_n": 5.0,
+        "x_m": 5e-06
+      },
+      {
+        "time_s": 3.05,
+        "y_m": 0,
+        "twist_rad": 0,
+        "normal_force_n": 5.0,
+        "x_m": 3.125e-05
+      },
+      {
+        "time_s": 3.1,
+        "y_m": 0,
+        "twist_rad": 0,
+        "normal_force_n": 5.0,
+        "x_m": 0.000125
+      },
+      {
+        "time_s": 3.15,
+        "y_m": 0,
+        "twist_rad": 0,
+        "normal_force_n": 5.0,
+        "x_m": 0.00028125
+      },
+      {
+        "time_s": 3.2,
+        "y_m": 0,
+        "twist_rad": 0,
+        "normal_force_n": 5.0,
+        "x_m": 0.0005
       },
       {
         "time_s": 3.5,
-        "x_m": 0.0025,
         "y_m": 0,
         "twist_rad": 0,
-        "normal_force_n": 5.0
+        "normal_force_n": 5.0,
+        "x_m": 0.002
       },
       {
-        "time_s": 4,
-        "x_m": 0.005,
+        "time_s": 4.0,
         "y_m": 0,
         "twist_rad": 0,
-        "normal_force_n": 5.0
+        "normal_force_n": 5.0,
+        "x_m": 0.0045
       },
       {
         "time_s": 4.5,
-        "x_m": 0.0075,
         "y_m": 0,
         "twist_rad": 0,
-        "normal_force_n": 5.0
+        "normal_force_n": 5.0,
+        "x_m": 0.007
       },
       {
-        "time_s": 5,
-        "x_m": 0.01,
+        "time_s": 5.1,
         "y_m": 0,
         "twist_rad": 0,
-        "normal_force_n": 5.0
+        "normal_force_n": 5.0,
+        "x_m": 0.01
       },
       {
-        "time_s": 6,
-        "x_m": 0.01,
+        "time_s": 6.0,
         "y_m": 0,
         "twist_rad": 0,
-        "normal_force_n": 5.0
+        "normal_force_n": 5.0,
+        "x_m": 0.01
       }
     ],
     "release": false,
@@ -270,8 +315,25 @@
     "notes": [
       "Every case in this comparison is pressed to the same 5 N, which is the measured load of the experiment it represents.",
       "Equal travel is not equal load. A rigid specimen leaves the gel carrying everything while foam absorbs most of it, so a travel-driven comparison compares materials at different loads, and each preset has to be refitted to its own material. Commanding the load removes both problems: one protocol transfers to every specimen, and the travel each one needs becomes a measurement rather than a setting.",
-      "The press ramps from 1 N so the handover from preload to load control is gradual whichever side of 1 N the preload landed on."
-    ]
+      "The press ramps from 1 N so the handover from preload to load control is gradual whichever side of 1 N the preload landed on.",
+      "The slide accelerates into its 5 mm/s over 0.2 s (500 um) instead of stepping into it: a velocity step is an infinite acceleration once mass is present, and even quasi-statically it asked every contact point to cross its elastic slip allowance in a single increment.",
+      "The slide is integrated with mass at 0.1 ms; see protocol.transient. It is the expensive part of the protocol: about 21,000 substeps for 10 mm."
+    ],
+    "transient": {
+      "numerical_damping": 0.05,
+      "windows": [
+        {
+          "start_time_s": 2.99,
+          "end_time_s": 5.1,
+          "time_increment_s": 0.0001,
+          "solve_interval_s": 0.005,
+          "sample_interval_s": 0.01,
+          "inertia": true,
+          "reason": "The whole slide is integrated with mass. A quasi-static solve loses the slide at its onset: contact points around the gel's free rim leave stick and then open, each release dumping stored elastic energy in one instant, and Newton's trial step turns a gel element inside out. With mass the release is an acceleration and the solve carries on, at two iterations a substep. Inertia is switched on 10 ms before the slide, inside the hold, so the transition and the first contact event are not the same load step."
+        }
+      ],
+      "note": "Physical damping comes from the specimen's Prony branches. TINTP amplitude decay removes only the integrator's own high-frequency content; no Rayleigh terms are added on top of the material law."
+    }
   },
   "contact_acceptance": {
     "scope": "all_recorded_frames_and_converged_substeps",

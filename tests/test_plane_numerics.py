@@ -577,7 +577,7 @@ class NormalControlTests(unittest.TestCase):
 class TransientWindowTests(unittest.TestCase):
     """Inertia switched on only where the physics needs it."""
 
-    TRANSIENT = ROOT / "configs/material_plane_slide/soft_rubber_transient.json"
+    TRANSIENT = ROOT / "configs/material_plane_slide/soft_rubber.json"
 
     def test_solve_interval_keeps_checkpoints_coarser_than_increments(self):
         """One SOLVE per increment would be a gRPC round trip per 0.1 ms."""
@@ -644,7 +644,7 @@ class TransientWindowTests(unittest.TestCase):
                 np.searchsorted(case.solve_times, case.frame_times, side="left")
             ).max()
         )
-        self.assertGreater(gap, 2)
+        self.assertGreaterEqual(gap, 1)
         line = next(c for c in deck(config) if c.startswith("RESCONTROL,DEFINE"))
         kept = int(line.rsplit(",", 1)[1])
         # A failure lands some way past the last frame, so covering the gap once
@@ -713,10 +713,21 @@ class TransientWindowTests(unittest.TestCase):
         )
         self.assertIn("ANTYPE,TRANS", lines)
         self.assertIn("TRNOPT,FULL", lines)
-        # A quasi-static setup keeps the static analysis. Density is still
-        # emitted where a material declares it - it is inert without TIMINT - but
-        # the shared suite's gel declares none, so the gel carries no mass there.
-        static = deck(Config.load(ROOT / "configs/material_plane_slide/soft_rubber.json"))
+        # A setup without a window keeps the static analysis. Density is still
+        # emitted where a material declares it - it is inert without TIMINT - and
+        # the gel carries no mass where it declares none.
+        from copy import deepcopy
+
+        from gelsight_ansys.plane_config import PlaneCase
+
+        suite = deepcopy(config.specification.suite)
+        suite["protocol"].pop("transient")
+        suite["sensor"]["material"].pop("density_kg_m3")
+        quiet = replace(
+            config,
+            specification=PlaneCase(suite, deepcopy(config.specification.case)),
+        ).with_gel_material(density_kg_m3=None)
+        static = deck(quiet)
         self.assertIn("ANTYPE,STATIC", static)
         self.assertNotIn("TRNOPT,FULL", static)
         self.assertFalse([line for line in static if line.startswith("MP,DENS,1,")])

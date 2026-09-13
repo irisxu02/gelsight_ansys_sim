@@ -8,6 +8,8 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
+import numpy as np
+
 from gelsight_ansys.ansys.contact import friction_commands
 from gelsight_ansys.ansys.materials import bulk_commands
 from gelsight_ansys.cli import main
@@ -20,6 +22,22 @@ ROOT = Path(__file__).resolve().parents[1]
 PLANE = ROOT / "configs/material_plane_slide/soft_rubber.json"
 SPHERE = ROOT / "configs/soft_sphere_press.json"
 
+
+def expected_count(case, coarse_step, key):
+    """Frames or checkpoints: the coarse grid joined with each window's own.
+
+    The suite integrates the slide with mass, and a window keeps its own
+    sampling and checkpoint grid whatever the dataset-level interval is, so
+    coarsening the CLI interval thins only the quasi-static stretches.
+    """
+    start, end = case.suite["protocol"]["recorded_interval_s"]
+    grids = [np.linspace(start, end, round((end - start) / coarse_step) + 1)]
+    for w in case.transient_windows:
+        step = w.get(key, w["time_increment_s"] if key == "solve_interval_s" else None)
+        if step is not None:
+            a, b = w["start_time_s"], w["end_time_s"]
+            grids.append(np.linspace(a, b, round((b - a) / step) + 1))
+    return len(np.unique(np.round(np.concatenate(grids), 12)))
 
 class UnifiedConfigTests(unittest.TestCase):
     def source(self, path=PLANE):
@@ -269,7 +287,7 @@ class UnifiedConfigTests(unittest.TestCase):
             for p in (ROOT / "configs").rglob("*.json")
             if self.source(p).get("config_kind") == "contact_simulation"
         ]
-        self.assertEqual(len(paths), 17)
+        self.assertEqual(len(paths), 16)
         with patch("gelsight_ansys.pipeline.run") as execute:
             for path in paths:
                 with redirect_stdout(io.StringIO()):
@@ -297,8 +315,11 @@ class UnifiedConfigTests(unittest.TestCase):
             )
         self.assertEqual(code, 0)
         config = execute.call_args.args[0]
-        self.assertEqual(len(config.trajectory), 121)
-        self.assertEqual(len(config.specification.solve_times), 601)
+        case = config.specification
+        self.assertEqual(len(config.trajectory), expected_count(case, 0.05, "sample_interval_s"))
+        self.assertEqual(
+            len(case.solve_times), expected_count(case, 0.01, "solve_interval_s")
+        )
         self.assertEqual(config.plane_options.object_element_size_m, 0.00075)
         with (
             patch("gelsight_ansys.pipeline.run") as execute,

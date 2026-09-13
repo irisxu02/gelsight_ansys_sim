@@ -433,8 +433,8 @@ on top of them.
 
 The window is dynamic, and the shared suite declares inertial stick-slip out of
 its scope. A setup that opens one is studying that behaviour deliberately and
-should say so in its notes; `configs/material_plane_slide/suite_transient.json`
-is the shipped example.
+should say so in its notes; the shipped `suite.json` opens one over the whole
+slide, because that is where the quasi-static path is lost.
 
 The measurement is the tangential-to-normal force ratio through the release: it
 should rise to the static coefficient as the interface breaks out and settle
