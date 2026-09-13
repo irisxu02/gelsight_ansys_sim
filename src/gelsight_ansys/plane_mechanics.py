@@ -307,9 +307,14 @@ class AnsysPlane(AnsysSession):
             nonmisc_base=self.nonmisc_base,
         )
         index = reader.result.parse_step_substep([point.load_step, point.substep])
-        state = self.extract_saved_result(
-            reader, index, self.config.physical_pose(point.time_s)
-        )
+        pose = self.config.physical_pose(point.time_s)
+        if pose.force_controlled:
+            pose = replace(pose, depth_m=self.achieved_travel(reader, index))
+        state = self.extract_saved_result(reader, index, pose)
+        state.load_step, state.substep = point.load_step, point.substep
+        # A checkpoint resume may land exactly on a frame time whose frame was
+        # never written; the pipeline renders it from this state.
+        self.restored_state = (state, pose)
         if point.replay_from_substep is None:
             # The point is a saved frame, so the result file must reproduce it.
             saved = SurfaceState.load(
@@ -456,6 +461,11 @@ class AnsysPlane(AnsysSession):
             state.load_step, state.substep = load_step, substep
             yield state, pose, stats
         del reader
+
+    def restored(self):
+        """The state the resume continues from, with solver statistics."""
+        state, pose = self.restored_state
+        return state, pose, gpu_statistics(self.directory)
 
     def replay_load_step(self, point):
         """Substeps the solver converged after the last one the pipeline checked.

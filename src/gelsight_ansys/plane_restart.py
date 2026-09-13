@@ -215,6 +215,12 @@ def validate_plane_resume(
             "start_time_s"
         ]
         at = solver_time + offset
+        # The monitor prints solver time to limited precision and the offset
+        # adds rounding; the point is a checkpoint, so name it by the grid.
+        grid = config.specification.solve_times
+        nearest = grid[np.argmin(np.abs(grid - at))]
+        if abs(nearest - at) < 1e-6:
+            at = float(nearest)
         if step < state.load_step or at < last_time - 1e-12:
             raise ValueError("The solver's last converged state precedes the last frame")
         recorded = [

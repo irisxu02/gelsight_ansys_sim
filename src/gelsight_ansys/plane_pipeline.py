@@ -266,21 +266,8 @@ def run_plane(
                 for state, pose, gpu in model.replay_load_step(restart):
                     record_substep(state, pose, gpu)
                 write_json(directory / "summary.json", summary)
-            for at in solve_times:
-                target = config.physical_pose(float(at))
-                last = None
-                summary["phase"] = "solving"
-                summary["target_time_s"] = float(at)
-                write_json(directory / "summary.json", summary)
-                for state, pose, gpu in model.solve_interval(target):
-                    last = record_substep(state, pose, gpu)
-                if last is None or not np.isclose(last[0].time_s, at, rtol=0, atol=1e-9):
-                    raise RuntimeError("Missing requested physical-time frame")
-                summary["elapsed_s"] = previous_elapsed + time.perf_counter() - started
-                write_json(directory / "summary.json", summary)
-                index = frame_indices.get(round(float(at), 12))
-                if index is None:
-                    continue
+            def save_frame(at, index, last):
+                """Render and record the frame at a solved instant."""
                 state, pose, gpu, check, bins = last
                 pose = replace(pose, time_s=float(at))
                 state.time_s = float(at)
@@ -306,6 +293,38 @@ def run_plane(
                 progress(
                     f"Frame {index + 1}/{len(times)}: physical t={at:.2f} s, force={metric['normal_force_n']:.6f} N, active bins={check['active_bin_fraction']:.3f}"
                 )
+
+            if restart:
+                # The restart point can be a frame time whose frame was never
+                # written - the run stopped after solving it. Render it now
+                # from the restored state, so the sequence has no hole.
+                index = frame_indices.get(round(float(restart.time_s), 12))
+                if index is not None and index >= len(summary["frames"]):
+                    state, pose, gpu = model.restored()
+                    check, bins = coverage.evaluate(
+                        state,
+                        model.contact_details,
+                        pose,
+                        model.object_mesh,
+                        model.object_displacement,
+                    )
+                    save_frame(float(restart.time_s), index, (state, pose, gpu, check, bins))
+            for at in solve_times:
+                target = config.physical_pose(float(at))
+                last = None
+                summary["phase"] = "solving"
+                summary["target_time_s"] = float(at)
+                write_json(directory / "summary.json", summary)
+                for state, pose, gpu in model.solve_interval(target):
+                    last = record_substep(state, pose, gpu)
+                if last is None or not np.isclose(last[0].time_s, at, rtol=0, atol=1e-9):
+                    raise RuntimeError("Missing requested physical-time frame")
+                summary["elapsed_s"] = previous_elapsed + time.perf_counter() - started
+                write_json(directory / "summary.json", summary)
+                index = frame_indices.get(round(float(at), 12))
+                if index is None:
+                    continue
+                save_frame(float(at), index, last)
         if (
             case.suite["protocol"].get("release", False)
             and summary["complete_recorded_interval"]

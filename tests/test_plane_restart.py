@@ -473,6 +473,128 @@ class PlaneRestartTests(unittest.TestCase):
             self.assertEqual(summary["status"], "pilot_passed")
             self.assertGreaterEqual(summary["elapsed_s"], 10.0)
 
+    def test_a_checkpoint_resume_renders_the_frame_at_its_restart_time(self):
+        """A run that stopped after solving a frame's instant still owes that frame."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            original, template, state = self.fixture(root)
+            config = original.with_plane_sampling(
+                sample_interval_s=0.02, solve_interval_s=0.02
+            )
+            # The solver converged the 0.02 s checkpoint (load step 2) and the
+            # pipeline checked all of it, but stopped before rendering the frame.
+            (root / "solver/gel.mntr").write_text(
+                "  LOAD SUB NO NO TOTL INCREMENT TOTAL V1\n\n"
+                "     1    100    1    2    2    0.02  2.0000  0.0\n"
+                "     2      5    1    2    7    0.004 2.0200  0.0\n"
+            )
+            summary_path = root / "summary.json"
+            summary = json.loads(summary_path.read_text())
+            summary["recorded_substeps"] = [
+                {"time_s": 0.02, "load_step": 2, "substep": 5, "normal_force_n": 1.0}
+            ]
+            summary_path.write_text(json.dumps(summary))
+            solved, rendered = [], []
+
+            class Model:
+                mesh = template.mesh
+                native_manifest = None
+                object_mesh = None
+                object_displacement = None
+                contact_details = {}
+
+                def __init__(self, *args, restart):
+                    self.point = restart
+                    self.step = restart.load_step
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *args):
+                    return False
+
+                def restored(self):
+                    current = deepcopy(state)
+                    current.time_s, current.load_step, current.substep = (
+                        self.point.time_s,
+                        self.point.load_step,
+                        self.point.substep,
+                    )
+                    return current, config.physical_pose(self.point.time_s), {"active": False}
+
+                def replay_load_step(self, point):
+                    return iter(())
+
+                def solve_interval(self, pose):
+                    solved.append(pose.time_s)
+                    self.step += 1
+                    current = deepcopy(state)
+                    current.time_s, current.load_step, current.substep = (
+                        pose.time_s,
+                        self.step,
+                        1,
+                    )
+                    yield current, pose, {"active": False}
+
+            renderer = SimpleNamespace(
+                device="cpu", render=lambda *args: np.zeros((2, 2, 3), np.uint8)
+            )
+            optical = {
+                "optical_normals": np.zeros((2, 2, 3)),
+                "optical_valid_mask": np.ones((2, 2), bool),
+                "optical_position_m": np.zeros((2, 2, 3)),
+            }
+            coverage = Mock(
+                evaluate=lambda *args: ({"active_bin_fraction": 1.0}, np.zeros(1))
+            )
+
+            def render(directory, index, cfg, current, *args):
+                rendered.append((index, current.time_s))
+                return {
+                    "time_s": current.time_s,
+                    "load_step": current.load_step,
+                    "normal_force_n": 0.0,
+                }
+
+            with (
+                patch("gelsight_ansys.plane_pipeline.AnsysPlane", Model),
+                patch(
+                    "gelsight_ansys.plane_pipeline.ContactCoverage", return_value=coverage
+                ),
+                patch(
+                    "gelsight_ansys.plane_pipeline.prepare_optics",
+                    return_value=(config, renderer),
+                ),
+                patch(
+                    "gelsight_ansys.plane_pipeline.optical_surface", return_value=optical
+                ),
+                patch(
+                    "gelsight_ansys.plane_pipeline.Markers",
+                    return_value=SimpleNamespace(reference_m=np.zeros((1, 3))),
+                ),
+                patch(
+                    "gelsight_ansys.plane_pipeline.image_coordinates",
+                    return_value=np.zeros((1, 2)),
+                ),
+                patch(
+                    "gelsight_ansys.plane_pipeline.render_plane_frame", side_effect=render
+                ),
+                patch("gelsight_ansys.run_services.build_report"),
+            ):
+                _, summary = run_plane(
+                    config,
+                    root,
+                    resume_directory=root,
+                    stop_after_s=0.04,
+                    progress=lambda _: None,
+                    from_checkpoint=True,
+                )
+            # Nothing is re-solved at 0.02: its frame comes from the restored state.
+            self.assertEqual(solved, [0.04])
+            self.assertEqual(rendered, [(1, 0.02), (2, 0.04)])
+            self.assertEqual([f["load_step"] for f in summary["frames"]], [1, 2, 3])
+            self.assertEqual(summary["checkpoint_resumes"][-1]["resumed_at_time_s"], 0.02)
+
 
 if __name__ == "__main__":
     unittest.main()
