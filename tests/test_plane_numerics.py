@@ -10,6 +10,7 @@ import json
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -52,6 +53,44 @@ def deck(config):
         return (Path(tmp) / "plane_model.inp").read_text().splitlines()
 
 
+def with_release(config, start=6.0, end=8.0):
+    """Extend a load-controlled protocol with a travel-driven release.
+
+    Load control cannot lift clear: holding zero load leaves the platen wherever
+    the surface last pushed it. The release therefore prescribes travel again,
+    and the schema requires release_travel_m on every keyframe from the release
+    onward. The shipped comparison stops before this, so the fixture is what a
+    setup that wants recovery and pull-off would declare.
+    """
+    from copy import deepcopy
+
+    from gelsight_ansys.plane_config import PlaneCase
+
+    suite = deepcopy(config.specification.suite)
+    protocol = suite["protocol"]
+    protocol.update(
+        release=True, release_start_time_s=start, allow_recorded_lift_off=True
+    )
+    protocol["recorded_interval_s"][1] = end
+    protocol["phases"].append(
+        {"name": "release", "start_time_s": start, "end_time_s": end}
+    )
+    last = protocol["keyframes"][-1]
+    protocol["keyframes"] = [
+        k for k in protocol["keyframes"] if k["time_s"] < start
+    ] + [
+        {**last, "time_s": start, "normal_force_n": 5.0, "release_travel_m": 0.00029},
+        {**last, "time_s": end - 0.4, "normal_force_n": 0.0, "release_travel_m": 0.0},
+        {**last, "time_s": end, "normal_force_n": 0.0, "release_travel_m": -0.0001},
+    ]
+    case = PlaneCase(suite, deepcopy(config.specification.case)).validate()
+    extended = replace(config, specification=case)
+    return replace(
+        extended,
+        trajectory=tuple(extended.physical_pose(t) for t in case.frame_times),
+    ).validate()
+
+
 class PlaneNumericsTests(unittest.TestCase):
     def test_setup_tolerances_reach_the_solver_unchanged(self):
         case = Config.load(RUBBER).specification
@@ -89,8 +128,18 @@ class PlaneNumericsTests(unittest.TestCase):
 
     def test_stabilization_damping_uses_the_damping_slots_not_the_squeal_pair(self):
         config = Config.load(RUBBER)
-        self.assertEqual(contact_damping_commands(config.indenter, 2), [])
-        self.assertNotIn("KEYOPT,2,15,", "".join(deck(config)))
+        # The setup declares damping, and it reaches the solver as declared.
+        self.assertEqual(
+            contact_damping_commands(config.indenter, 2),
+            ["RMODIF,1,31,0.001", "RMODIF,1,32,0.001", "KEYOPT,2,15,3"],
+        )
+        # Undeclared means no commands at all, not a silent default.
+        bare = config.with_contact_damping(
+            stabilization_damping_normal=None,
+            stabilization_damping_tangential=None,
+        )
+        self.assertEqual(contact_damping_commands(bare.indenter, 2), [])
+        self.assertNotIn("KEYOPT,2,15,", "".join(deck(bare)))
         damped = config.with_contact_damping(
             stabilization_damping_normal=1e-3,
             stabilization_damping_tangential=1e-4,
@@ -216,8 +265,35 @@ if __name__ == "__main__":
 class NormalControlTests(unittest.TestCase):
     """Travel control and load control, and the segments that cannot be either."""
 
-    FORCE = ROOT / "configs/material_plane_slide/soft_rubber_force.json"
-    TRAVEL = ROOT / "configs/material_plane_slide/soft_rubber.json"
+    FORCE = ROOT / "configs/material_plane_slide/soft_rubber.json"
+
+    @property
+    def TRAVEL(self):
+        """The same preset switched back to travel control.
+
+        Every shipped preset commands a load, because that is what makes a
+        material comparison a comparison. Travel control is still supported, so
+        the fixture is the mode a user would write by hand.
+        """
+        import shutil
+        import tempfile as tmpmod
+
+        tmp = tmpmod.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        root = Path(tmp)
+        shutil.copytree(self.FORCE.parent, root / "material_plane_slide")
+        shutil.copytree(self.FORCE.parent.parent / "materials", root / "materials")
+        case = root / "material_plane_slide" / self.FORCE.name
+        setup = case.parent / json.loads(case.read_text())["setup"]
+        suite = json.loads(setup.read_text())
+        protocol = suite["protocol"]
+        protocol["normal_control"] = "prescribed_platen_travel"
+        protocol["initialization"]["end_normal_travel_m"] = 0.00025
+        for k in protocol["keyframes"]:
+            k.pop("normal_force_n", None)
+            k["normal_travel_m"] = 0.00025 if k["time_s"] == 0 else 0.001
+        setup.write_text(json.dumps(suite))
+        return case
 
     def model_for(self, config):
         import tempfile as tmpmod
@@ -242,7 +318,7 @@ class NormalControlTests(unittest.TestCase):
         return model, pose, model.platen_commands(pose)
 
     def test_preload_and_release_stay_travel_driven_under_load_control(self):
-        case = Config.load(self.FORCE).specification
+        case = with_release(Config.load(self.FORCE)).specification
         self.assertEqual(case.normal_control, "prescribed_normal_force")
         # Before first touch the normal stiffness is zero, so a commanded load has
         # no equilibrium position.
@@ -337,7 +413,7 @@ class NormalControlTests(unittest.TestCase):
         self.assertEqual(ramped[-1], "KBC,0")
 
     def test_release_drops_the_load_before_prescribing_the_lift(self):
-        config = Config.load(self.FORCE)
+        config = with_release(Config.load(self.FORCE))
         model, pose, commands = self.solve_block(config, 8.0, previous=7.98)
         self.assertFalse(pose.force_controlled)
         self.assertLess(pose.depth_m, 0)
@@ -371,7 +447,7 @@ class NormalControlTests(unittest.TestCase):
 
         from gelsight_ansys.metrics import validate_frame
 
-        config = Config.load(self.FORCE)
+        config = with_release(Config.load(self.FORCE))
         with tmpmod.TemporaryDirectory() as tmp:
             model = AnsysPlane(config, Path(tmp))
             model.mapdl = MagicMock()
@@ -468,7 +544,7 @@ class NormalControlTests(unittest.TestCase):
     def test_load_controlled_protocols_are_rejected_when_incoherent(self):
         from gelsight_ansys.plane_config import PlaneCase
 
-        source = Config.load(self.FORCE).specification
+        source = with_release(Config.load(self.FORCE)).specification
 
         def build(mutate):
             case = PlaneCase(source.suite, source.case)
@@ -632,7 +708,7 @@ class TransientWindowTests(unittest.TestCase):
         case = config.specification
         window = case.transient_windows[0]
         model = self.model(config)
-        for at in (0.5, 2.5, window["end_time_s"] + 0.05, 7.0):
+        for at in (0.5, 2.5, window["end_time_s"] + 0.05, 5.5):
             self.assertIsNone(case.transient_at(at), at)
             self.assertEqual(
                 model.time_integration_commands(config.physical_pose(at)),
@@ -848,7 +924,7 @@ class SymmetricContactTests(unittest.TestCase):
 
     def test_a_pair_that_carries_part_of_the_load_stops_the_run(self):
         # Load control, so the commanded share is a number the guard can check.
-        config = self.pairings(ROOT / "configs/material_plane_slide/soft_rubber_force.json")[1]
+        config = self.pairings()[1]
         model, _ = self.model(config)
         model.last_pose = config.physical_pose(2.0)
         self.assertTrue(model.last_pose.force_controlled)

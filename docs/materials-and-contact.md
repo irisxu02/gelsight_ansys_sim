@@ -66,9 +66,11 @@ synthetic and uncalibrated.
 
 Every case uses the same uniform sensor gel described above. Only specimen bulk
 behavior, surface geometry, and interface properties vary. The specimen is a
-60 × 35 × 3 mm slab with a nominally planar contacting face. Its backing travel
-includes both specimen and gel compression, so equal commanded travel does not
-imply equal gel indentation or equal normal force. The complete geometry,
+60 × 35 × 3 mm slab with a nominally planar contacting face. Every case is
+pressed to the same commanded normal load, 5 N, and the platen travel that
+takes is recorded rather than set: it includes both specimen and gel
+compression, so the same load means a different indentation for each material,
+which is the comparison the suite exists to make. The complete geometry,
 trajectory, contact requirements, and GPU policy are in
 [`suite.json`](../configs/material_plane_slide/suite.json).
 
@@ -128,10 +130,10 @@ geometry and constraints.
 
 The material stores deformation while the Prony contributions permit
 time-dependent stress relaxation. Its long-term shear modulus approaches 75%
-of the instantaneous value; bulk stiffness does not relax. Some commanded
-travel is absorbed by the specimen, so force and gel deformation can differ
-from the rigid reference. The holds are intended to expose force and marker
-changes over time.
+of the instantaneous value; bulk stiffness does not relax. At the shared load
+some of the platen travel is absorbed by the specimen, so gel deformation is
+smaller than the rigid reference's and the recorded travel larger. The holds
+are intended to expose force and marker changes over time.
 
 Friction and surface geometry match the rigid reference. The specified mixed
 u-P formulation has unverified GPU compatibility for this case. The execution

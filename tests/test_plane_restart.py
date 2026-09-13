@@ -25,13 +25,24 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def release_config(config):
-    case = PlaneCase(config.specification.suite, config.specification.case)
+    """Extend the shipped load-controlled protocol with a travel-driven release.
+
+    Holding zero load cannot lift clear, so the release prescribes travel again
+    and every keyframe from it onward carries release_travel_m.
+    """
+    case = PlaneCase(
+        deepcopy(config.specification.suite), deepcopy(config.specification.case)
+    )
     protocol = case.suite["protocol"]
     protocol.update(release=True, release_start_time_s=6.0, allow_recorded_lift_off=True)
     protocol["recorded_interval_s"][1] = 8.0
-    protocol["keyframes"].append(
-        {**protocol["keyframes"][-1], "time_s": 8.0, "normal_travel_m": -0.00025}
-    )
+    protocol["phases"].append({"name": "release", "start_time_s": 6.0, "end_time_s": 8.0})
+    last = protocol["keyframes"][-1]
+    protocol["keyframes"] = [k for k in protocol["keyframes"] if k["time_s"] < 6.0] + [
+        {**last, "time_s": 6.0, "normal_force_n": 5.0, "release_travel_m": 0.00029},
+        {**last, "time_s": 7.6, "normal_force_n": 0.0, "release_travel_m": 0.0},
+        {**last, "time_s": 8.0, "normal_force_n": 0.0, "release_travel_m": -0.0001},
+    ]
     return replace(config, specification=case).with_plane_sampling(
         sample_interval_s=0.1, solve_interval_s=0.02
     )
@@ -131,7 +142,7 @@ class PlaneRestartTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "requires a fresh run"):
                 validate_plane_resume(
                     root,
-                    continued.with_contact_damping(stabilization_damping_normal=1e-3),
+                    continued.with_contact_damping(stabilization_damping_normal=2e-3),
                     numerics_override=True,
                 )
             with self.assertRaisesRegex(ValueError, "requires a fresh run"):
@@ -157,7 +168,7 @@ class PlaneRestartTests(unittest.TestCase):
             bins = scoped.specification.suite["contact_acceptance"][
                 "macroscopic_contact_bins"
             ]
-            bins["region"] = "camera_field_of_view"
+            bins["region"] = "whole_sensor_surface"
             with self.assertRaisesRegex(ValueError, "contact_acceptance"):
                 validate_plane_resume(root, scoped)
             _, summary = validate_plane_resume(root, scoped, acceptance_override=True)
@@ -165,12 +176,13 @@ class PlaneRestartTests(unittest.TestCase):
             # Frames written before the restart keep the rules they were checked
             # against, so the record says exactly where the boundary falls.
             self.assertEqual(override["resumed_at_time_s"], 0.0)
-            self.assertNotIn(
-                "region", override["from"]["macroscopic_contact_bins"]
+            self.assertEqual(
+                override["from"]["macroscopic_contact_bins"]["region"],
+                "camera_field_of_view",
             )
             self.assertEqual(
                 override["to"]["macroscopic_contact_bins"]["region"],
-                "camera_field_of_view",
+                "whole_sensor_surface",
             )
             # An acceptance resume is not a licence to change the mechanics.
             with self.assertRaisesRegex(ValueError, "mechanical setup"):

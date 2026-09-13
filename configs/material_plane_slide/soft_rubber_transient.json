@@ -43,7 +43,7 @@
     "mixed_up_gpu_compatibility_check"
   ],
   "model_notes": [
-    "Load controlled, with the slide onset integrated as a transient.",
+    "The shared 5 N protocol, with the slide onset integrated as a transient.",
     "Mass reaches the solver only through MP,DENS, from density_kg_m3 on the gel and on the specimen's material case. A transient window over a model without it integrates no inertia at all."
   ],
   "expected_observables": [

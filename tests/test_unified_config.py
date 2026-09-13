@@ -187,8 +187,10 @@ class UnifiedConfigTests(unittest.TestCase):
         self.assertEqual(config.solver.force_tolerance, 0.005)
         self.assertEqual(config.solver.force_norm, 1)
         self.assertFalse(config.solver.nonlinear_diagnostics)
-        self.assertIsNone(config.indenter.stabilization_damping_normal)
-        self.assertIsNone(config.indenter.stabilization_damping_tangential)
+        # Damping is the setup's to declare, and the CLI leaves it as declared.
+        self.assertEqual(config.indenter.stabilization_damping_normal, 0.001)
+        self.assertEqual(config.indenter.stabilization_damping_tangential, 0.001)
+        self.assertEqual(config.indenter.stabilization_damping_activation, "always")
 
     def test_contact_damping_requires_plane_geometry(self):
         with redirect_stderr(io.StringIO()) as errors, patch(
@@ -267,7 +269,7 @@ class UnifiedConfigTests(unittest.TestCase):
             for p in (ROOT / "configs").rglob("*.json")
             if self.source(p).get("config_kind") == "contact_simulation"
         ]
-        self.assertEqual(len(paths), 18)
+        self.assertEqual(len(paths), 17)
         with patch("gelsight_ansys.pipeline.run") as execute:
             for path in paths:
                 with redirect_stdout(io.StringIO()):

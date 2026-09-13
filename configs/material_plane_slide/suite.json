@@ -139,23 +139,24 @@
     ]
   },
   "protocol": {
-    "normal_control": "prescribed_platen_travel",
+    "normal_control": "prescribed_normal_force",
     "travel_sign": "positive_toward_sensor",
     "travel_reference": "first_touch_of_highest_specimen_surface_point_with_undeformed_sensor",
-    "travel_meaning": "Total approach of specimen backing; includes specimen and gel compression.",
+    "travel_meaning": "An outcome, not a command: the coupled platen is free in z under a commanded normal load, and its position is read back per substep and recorded as platen_travel_m.",
     "initialization": {
       "record_as_dataset_frames": false,
       "start_time_s": -2,
       "end_time_s": 0,
       "start_normal_travel_m": 0,
-      "end_normal_travel_m": 0.00025,
+      "end_normal_travel_m": 3e-05,
       "x_m": 0,
       "y_m": 0,
       "twist_rad": 0,
       "interpolation": "linear",
       "start_contact": "nominal_first_touch",
       "carry_material_and_contact_history_into_recording": true,
-      "require_contact_acceptance_before_recording": true
+      "require_contact_acceptance_before_recording": true,
+      "note": "A load cannot close an open gap, so contact is established by travel and the platen is then handed over to load control. The preload has to stay below the target on the stiffest specimen in the comparison: the rigid reference reaches 5 N at 0.092 mm, so 0.030 mm leaves margin, and the softer materials simply start further from the target and are pressed to it. This is the one travel that is still a command."
     },
     "recorded_interval_s": [
       0,
@@ -188,94 +189,94 @@
     "keyframes": [
       {
         "time_s": 0,
-        "normal_travel_m": 0.00025,
         "x_m": 0,
         "y_m": 0,
-        "twist_rad": 0
+        "twist_rad": 0,
+        "normal_force_n": 1.0
       },
       {
         "time_s": 0.5,
-        "normal_travel_m": 0.0004,
         "x_m": 0,
         "y_m": 0,
-        "twist_rad": 0
+        "twist_rad": 0,
+        "normal_force_n": 2.0
       },
       {
         "time_s": 1,
-        "normal_travel_m": 0.0006,
         "x_m": 0,
         "y_m": 0,
-        "twist_rad": 0
+        "twist_rad": 0,
+        "normal_force_n": 3.0
       },
       {
         "time_s": 1.5,
-        "normal_travel_m": 0.0008,
         "x_m": 0,
         "y_m": 0,
-        "twist_rad": 0
+        "twist_rad": 0,
+        "normal_force_n": 4.0
       },
       {
         "time_s": 2,
-        "normal_travel_m": 0.001,
         "x_m": 0,
         "y_m": 0,
-        "twist_rad": 0
+        "twist_rad": 0,
+        "normal_force_n": 5.0
       },
       {
         "time_s": 3,
-        "normal_travel_m": 0.001,
         "x_m": 0,
         "y_m": 0,
-        "twist_rad": 0
+        "twist_rad": 0,
+        "normal_force_n": 5.0
       },
       {
         "time_s": 3.5,
-        "normal_travel_m": 0.001,
         "x_m": 0.0025,
         "y_m": 0,
-        "twist_rad": 0
+        "twist_rad": 0,
+        "normal_force_n": 5.0
       },
       {
         "time_s": 4,
-        "normal_travel_m": 0.001,
         "x_m": 0.005,
         "y_m": 0,
-        "twist_rad": 0
+        "twist_rad": 0,
+        "normal_force_n": 5.0
       },
       {
         "time_s": 4.5,
-        "normal_travel_m": 0.001,
         "x_m": 0.0075,
         "y_m": 0,
-        "twist_rad": 0
+        "twist_rad": 0,
+        "normal_force_n": 5.0
       },
       {
         "time_s": 5,
-        "normal_travel_m": 0.001,
         "x_m": 0.01,
         "y_m": 0,
-        "twist_rad": 0
+        "twist_rad": 0,
+        "normal_force_n": 5.0
       },
       {
         "time_s": 6,
-        "normal_travel_m": 0.001,
         "x_m": 0.01,
         "y_m": 0,
-        "twist_rad": 0
+        "twist_rad": 0,
+        "normal_force_n": 5.0
       }
     ],
     "release": false,
     "allow_recorded_lift_off": false,
     "notes": [
-      "The recorded sequence begins in a preloaded state; setup is not part of the requested contact-only dataset.",
-      "Compression is fixed during sliding; normal force can evolve through relaxation and contact redistribution.",
-      "This is a time-dependent quasi-static sequence. High-frequency vibration and inertial stick-slip are outside its scope."
+      "Every case in this comparison is pressed to the same 5 N, which is the measured load of the experiment it represents.",
+      "Equal travel is not equal load. A rigid specimen leaves the gel carrying everything while foam absorbs most of it, so a travel-driven comparison compares materials at different loads, and each preset has to be refitted to its own material. Commanding the load removes both problems: one protocol transfers to every specimen, and the travel each one needs becomes a measurement rather than a setting.",
+      "The press ramps from 1 N so the handover from preload to load control is gradual whichever side of 1 N the preload landed on."
     ]
   },
   "contact_acceptance": {
     "scope": "all_recorded_frames_and_converged_substeps",
     "definition": "continuous_full_nominal_footprint_at_macroscopic_scale",
-    "sensor_region": "whole_outer_sensor_surface_including_area_outside_camera_fov",
+    "sensor_region": "camera_field_of_view_for_bin_activity; whole_outer_sensor_surface_for_geometry_and_total_force",
     "minimum_geometric_footprint_coverage_fraction": 1,
     "minimum_plane_edge_margin_m": 0.002,
     "use_deformed_sensor_coordinates": true,
@@ -288,7 +289,9 @@
       "clip_bins_at_sensor_boundary": true,
       "contact_measure": "positive_repulsive_normal_contact_force_integrated_in_each_bin",
       "minimum_bin_force_n": 1e-06,
-      "required_active_bin_fraction": 1
+      "required_active_bin_fraction": 1,
+      "region": "camera_field_of_view",
+      "region_note": "A slide unloads the gel's free corners while the imaged region stays well seated, and those corners lie outside every frame the dataset holds. Geometric footprint coverage, edge margin and total repulsive force stay gated on the whole outer surface, and active_bin_fraction for that whole surface is recorded in every frame. See docs/convergence.md."
     },
     "minimum_total_repulsive_normal_force_n": 0.01,
     "microscopic_asperity_gaps_allowed": true,
@@ -333,12 +336,19 @@
     "formulation": "augmented_lagrange",
     "sliding": "finite",
     "separation": "allowed",
-    "normal_stiffness_factor": 1,
-    "tangential_stiffness_factor": 1,
-    "penetration_tolerance_m": 1e-06,
-    "elastic_slip_tolerance_m": 2.5e-06,
+    "normal_stiffness_factor": 10,
+    "tangential_stiffness_factor": 30,
+    "penetration_tolerance_m": 1e-05,
+    "elastic_slip_tolerance_m": 7.5e-05,
     "update_stiffness_each_iteration": true,
-    "retain_history_during_slide": true
+    "retain_history_during_slide": true,
+    "stabilization_damping": {
+      "normal_factor": 0.001,
+      "tangential_factor": 0.001,
+      "activation": "always"
+    },
+    "penetration_note": "Penetration scales as 1/FKN. At FKN = 1 it was measured at 26.4 um, a sixth of the 150 um of surface deformation the renderer reads, and a penetration tolerance of 1 um below that forces augmentation on nearly every substep: contact status then chatters, and the chattering climbs with sliding distance until the solve stops. FKN = 10 brings penetration to 0.69 um and a 10 um tolerance sits well above it, so augmentation rarely fires. The accuracy and the convergence improve together; this is not a trade.",
+    "tangential_pair_note": "FKT and SLTO are raised together, so the elastic slip the interface tolerates - their ratio - is unchanged at 2.5 um and the contact is exactly as stiff. What changes is how often augmented Lagrange revisits a converged state to update its multipliers. At FKT = 1 each revisit threw the residual up by as much as two orders of magnitude, and the slide was lost within tens of micrometres."
   },
   "solver": {
     "version": 252,
@@ -388,7 +398,8 @@
       "This sequence has no release, so recovery after separation and adhesive pull-off are not observed.",
       "A single x slide cannot identify all anisotropic parameters or all rate dependence.",
       "The fluffy case represents an effective layer; it does not resolve individual fibers.",
-      "No vibration channels are claimed by this quasi-static protocol."
+      "No vibration channels are claimed by this quasi-static protocol.",
+      "Platen travel is an outcome here, so a case's indentation depth is a result to read, not a parameter to compare against another run's."
     ]
   },
   "required_capabilities": [
