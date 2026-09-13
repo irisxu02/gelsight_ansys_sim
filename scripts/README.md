@@ -14,6 +14,7 @@ behaviour is tested rather than living in the script. Run any of them with
 | `validate_plane.py` | The same for a plane-contact run. |
 | `validate_plane_contact.py` | Contact acceptance on a finished plane run. |
 | `render_queue.py` | Discover the shipped presets and run them in order. |
+| `start_render_queue.ps1` | Windows launcher for it: snapshots the tree, then starts a detached worker that survives the shell. |
 | `export_examples.py` | Write the documentation examples from finished runs. |
 | `audit_examples.py` | Check exported examples for identifying or oversized content. |
 | `compare_examples.py` | Compare two exports frame by frame. |
