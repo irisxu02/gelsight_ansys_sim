@@ -81,10 +81,24 @@ def frame_metrics(state, fields, marker_reference, marker_position, pose, gpu):
     }
 
 
+def inertia_integrated_at(config, time_s):
+    """Whether this instant lies in a transient window that integrates mass."""
+    case = getattr(config, "specification", None)
+    if case is None:
+        return False
+    window = case.transient_at(time_s)
+    return window is not None and window.get("inertia", True)
+
+
 def validate_frame(metrics, config):
     magnitude = np.linalg.norm(metrics["force_on_gel_n"])
     tolerance = max(config.solver.balance_tolerance * magnitude, 1e-6)
-    if metrics["force_balance_error_n"] > tolerance:
+    # Inside an inertia window the contact-backing difference is the gel's
+    # inertial force; the quasi-static balance is checked again on the first
+    # frame after the window closes.
+    if metrics["force_balance_error_n"] > tolerance and not inertia_integrated_at(
+        config, metrics["time_s"]
+    ):
         raise RuntimeError(
             "Contact and backing forces fail the configured balance tolerance"
         )

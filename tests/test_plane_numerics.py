@@ -677,6 +677,24 @@ class TransientWindowTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "mechanical checkpoints"):
             case.validate_sampling()
 
+    def test_force_balance_is_inertial_inside_the_window_and_strict_outside(self):
+        """Contact minus backing is m*a with mass integrated, not an error."""
+        from gelsight_ansys.metrics import validate_frame
+
+        config = Config.load(self.TRANSIENT)
+        window = next(w for w in config.specification.transient_windows if w["inertia"])
+        inside = (window["start_time_s"] + window["end_time_s"]) / 2
+        after = window["end_time_s"] + 0.05
+        base = {
+            "force_on_gel_n": [0.0, 0.0, -5.0],
+            "force_balance_error_n": 0.5,  # ten percent of the load
+            "pilot_force_error_n": 0.0,
+            "raster_force_error_n": 0.0,
+        }
+        validate_frame({**base, "time_s": inside}, config)
+        with self.assertRaisesRegex(RuntimeError, "balance tolerance"):
+            validate_frame({**base, "time_s": after}, config)
+
     def test_a_window_may_not_solve_more_finely_than_it_steps(self):
         case = Config.load(self.TRANSIENT).specification
         window = next(w for w in case.transient_windows if w["inertia"])

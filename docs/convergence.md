@@ -392,6 +392,17 @@ an infinite acceleration once mass is present. The slide keyframes accelerate
 over 20 ms; at 5 mm/s against a 5 g specimen that costs about 1 mN of inertia,
 far below the 5 N contact load, and the slide still covers its declared distance.
 
+**A balance check that knows about mass.** Quasi-statically the contact force
+on the gel and the backing reaction cancel, and every recorded substep is held
+to that within `solver.balance_tolerance`. With mass integrated they do not
+cancel: the difference is the gel's inertial force, and a rim release of a few
+tens of metres per second squared on a two-gram gel is already a few percent of
+a 5 N load. Inside an inertia window the residual is therefore recorded as the
+inertial imbalance rather than gated, and the quasi-static check resumes on the
+first substep after the window closes. That first check is also the test that
+the window was long enough: kinetic energy that remains when integration is
+switched off shows up there as an imbalance.
+
 **Damping that is not doubled.** `numerical_damping` sets `TINTP` amplitude
 decay, which removes the integrator's own high-frequency content. The specimen's
 Prony branches already supply physical damping, so no Rayleigh terms are added
