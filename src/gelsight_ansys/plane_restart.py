@@ -18,6 +18,27 @@ class PlaneRestart:
     substep: int
     frame_index: int
     time_s: float
+    # A checkpoint resume continues from the last converged load step rather
+    # than the last saved frame. The solver went on past the last substep the
+    # pipeline validated, so those substeps are replayed from gel.rst and put
+    # through the same checks before anything new is solved.
+    replay_from_substep: int | None = None
+
+
+def last_converged(monitor):
+    """(load step, substep, solver time) of the last row in a .mntr file."""
+    last = None
+    for line in Path(monitor).read_text(errors="replace").splitlines():
+        fields = line.split()
+        if len(fields) < 7:
+            continue
+        try:
+            last = (int(fields[0]), int(fields[1]), float(fields[6]))
+        except ValueError:
+            continue
+    if last is None:
+        raise ValueError(f"No converged substeps recorded in {monitor}")
+    return last
 
 
 # Newton-Raphson controls that a restart restates into the resumed database. They
@@ -37,7 +58,12 @@ NUMERICS_ONLY = frozenset(
 
 
 def validate_plane_resume(
-    directory, config, *, numerics_override=False, acceptance_override=False
+    directory,
+    config,
+    *,
+    numerics_override=False,
+    acceptance_override=False,
+    from_checkpoint=False,
 ):
     directory = Path(directory)
     # The saved configuration is read as a record of the interrupted run, so a
@@ -178,6 +204,33 @@ def validate_plane_resume(
             {"resumed_at_time_s": last_time, "changed": changed}
         )
         summary["diagnostic_run"] = True
-    return PlaneRestart(
-        state.load_step, state.substep, len(frames) - 1, last_time
-    ), summary
+    restart = PlaneRestart(state.load_step, state.substep, len(frames) - 1, last_time)
+    if from_checkpoint:
+        # MAPDL keeps the last converged load step's restart point (Jobname.R001)
+        # whatever else its retention does, so that is the one point a resume
+        # can always reach. Everything the solver converged past the last frame
+        # is replayed through the pipeline's checks before new solving starts.
+        step, substep, solver_time = last_converged(directory / "solver/gel.mntr")
+        offset = config.specification.suite["protocol"]["initialization"][
+            "start_time_s"
+        ]
+        at = solver_time + offset
+        if step < state.load_step or at < last_time - 1e-12:
+            raise ValueError("The solver's last converged state precedes the last frame")
+        recorded = [
+            r for r in summary.get("recorded_substeps", []) if r["load_step"] == step
+        ]
+        replay_from = (max(r["substep"] for r in recorded) + 1) if recorded else 1
+        if replay_from > substep:
+            replay_from = None
+        restart = PlaneRestart(step, substep, len(frames) - 1, at, replay_from)
+        summary.setdefault("checkpoint_resumes", []).append(
+            {
+                "last_frame_time_s": last_time,
+                "resumed_at_time_s": at,
+                "load_step": step,
+                "substep": substep,
+                "replayed_from_substep": replay_from,
+            }
+        )
+    return restart, summary

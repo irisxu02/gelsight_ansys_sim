@@ -310,32 +310,37 @@ class AnsysPlane(AnsysSession):
         state = self.extract_saved_result(
             reader, index, self.config.physical_pose(point.time_s)
         )
-        saved = SurfaceState.load(
-            self.directory.parent / "states" / f"frame_{point.frame_index:04d}.npz"
-        )
-        for key in (
-            "reference_m",
-            "displacement_m",
-            "contact_force_n",
-            "contact_elastic_slip_m",
-            "contact_integration_status",
-        ):
-            np.testing.assert_allclose(
-                getattr(state, key), getattr(saved, key), rtol=1e-10, atol=1e-12
+        if point.replay_from_substep is None:
+            # The point is a saved frame, so the result file must reproduce it.
+            saved = SurfaceState.load(
+                self.directory.parent / "states" / f"frame_{point.frame_index:04d}.npz"
             )
-        with np.load(
-            self.directory.parent / "bodies" / f"frame_{point.frame_index:04d}.npz"
-        ) as body:
-            np.testing.assert_allclose(
-                self.last_displacement, body["gel_displacement_m"], rtol=1e-10, atol=1e-12
-            )
-            if self.object_mesh is not None:
+            for key in (
+                "reference_m",
+                "displacement_m",
+                "contact_force_n",
+                "contact_elastic_slip_m",
+                "contact_integration_status",
+            ):
                 np.testing.assert_allclose(
-                    self.object_displacement,
-                    body["indenter_displacement_m"],
+                    getattr(state, key), getattr(saved, key), rtol=1e-10, atol=1e-12
+                )
+            with np.load(
+                self.directory.parent / "bodies" / f"frame_{point.frame_index:04d}.npz"
+            ) as body:
+                np.testing.assert_allclose(
+                    self.last_displacement,
+                    body["gel_displacement_m"],
                     rtol=1e-10,
                     atol=1e-12,
                 )
+                if self.object_mesh is not None:
+                    np.testing.assert_allclose(
+                        self.object_displacement,
+                        body["indenter_displacement_m"],
+                        rtol=1e-10,
+                        atol=1e-12,
+                    )
         del reader
         self.previous_solver_time = expected_time
         # gel.rdb carries the controls written when the model was first built, so
@@ -422,8 +427,14 @@ class AnsysPlane(AnsysSession):
         last_substep = int(a.get_value("ACTIVE", 0, "SET", "SBST"))
         self.last_timings = {"solve_command_s": time.perf_counter() - start}
         stats = gpu_statistics(self.directory)
+        yield from self.converged_states(self.frame_number, 1, last_substep, stats)
+        self.previous_solver_time = solver_time
+
+    def converged_states(self, load_step, first, last, stats):
+        """Read substeps first..last of a load step back from gel.rst, in order."""
         from .rst_contact import ContactResult
 
+        c = self.config
         reader = ContactResult(
             self.directory / "gel.rst",
             self.contact_start + 1,
@@ -431,8 +442,8 @@ class AnsysPlane(AnsysSession):
             user_values_per_point=24 if self.extra_environment else 0,
             nonmisc_base=self.nonmisc_base,
         )
-        for substep in range(1, last_substep + 1):
-            index = reader.result.parse_step_substep([self.frame_number, substep])
+        for substep in range(first, last + 1):
+            index = reader.result.parse_step_substep([load_step, substep])
             at = float(reader.result.time_values[index]) - self.time_offset
             pose = c.physical_pose(
                 max(self.case.suite["protocol"]["initialization"]["start_time_s"], at)
@@ -442,10 +453,27 @@ class AnsysPlane(AnsysSession):
                 # platen actually reached before anything downstream consumes it.
                 pose = replace(pose, depth_m=self.achieved_travel(reader, index))
             state = self.extract_saved_result(reader, index, pose)
-            state.load_step, state.substep = self.frame_number, substep
+            state.load_step, state.substep = load_step, substep
             yield state, pose, stats
         del reader
-        self.previous_solver_time = solver_time
+
+    def replay_load_step(self, point):
+        """Substeps the solver converged after the last one the pipeline checked.
+
+        A checkpoint resume continues from the last converged load step. The
+        solve that produced it ran to its end before the pipeline stopped, so its
+        later substeps exist in gel.rst but were never validated or recorded;
+        they are yielded here so the caller can put them through the same checks
+        it applies while solving.
+        """
+        if point.replay_from_substep is None:
+            return
+        yield from self.converged_states(
+            point.load_step,
+            point.replay_from_substep,
+            point.substep,
+            gpu_statistics(self.directory),
+        )
 
     def retained_restart_points(self):
         """How many load steps of restart state to keep (RESCONTROL MAXFILES).

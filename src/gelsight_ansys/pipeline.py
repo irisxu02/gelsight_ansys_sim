@@ -27,6 +27,7 @@ def run(
     stop_after_s=None,
     numerics_override=False,
     acceptance_override=False,
+    from_checkpoint=False,
 ):
 
     if config.is_plane:
@@ -43,6 +44,7 @@ def run(
             resume_directory=resume_directory,
             numerics_override=numerics_override,
             acceptance_override=acceptance_override,
+            from_checkpoint=from_checkpoint,
         )
     if stop_after_s is not None:
         raise ValueError("Pilot stopping time currently requires plane geometry")
@@ -295,6 +297,7 @@ def resume_run(
     stop_after_s=None,
     numerics_override=False,
     acceptance_override=False,
+    from_checkpoint=False,
 ):
     """Copy an interrupted run and restore its last saved converged load step."""
     import shutil
@@ -310,6 +313,7 @@ def resume_run(
             config,
             numerics_override=numerics_override,
             acceptance_override=acceptance_override,
+            from_checkpoint=from_checkpoint,
         )
     elif config.to_dict() != original.to_dict():
         raise ValueError("Non-plane resume requires the unchanged saved configuration")
@@ -326,4 +330,5 @@ def resume_run(
         stop_after_s=stop_after_s,
         numerics_override=numerics_override,
         acceptance_override=acceptance_override,
+        from_checkpoint=from_checkpoint,
     )

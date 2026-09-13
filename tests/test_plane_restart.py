@@ -74,6 +74,66 @@ class RestartIndexTests(unittest.TestCase):
         self.assertNotIn((176, 60), restart_points(FILE_SUMMARY))
 
 
+MONITOR = """
+  LOAD   SUB-  NO.  NO.    TOTL  INCREMENT    TOTAL         VARIAB 1
+  STEP   STEP ATTMP ITER   ITER  TIME/LFACT   TIME/LFACT    MONITOR
+
+     1      1    1     4      4    0.20000E-01  0.20000E-01   0.0000
+     3      6    2     3     40    0.10000E-01  2.0300        0.0000
+     3      7    1     2     42    0.10000E-01  2.0400        0.0000
+"""
+
+
+class CheckpointResumeTests(unittest.TestCase):
+    """The last converged load step is the one restart point MAPDL always keeps."""
+
+    def test_the_monitor_names_the_last_converged_substep(self):
+        from gelsight_ansys.plane_restart import last_converged
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "gel.mntr"
+            path.write_text(MONITOR)
+            self.assertEqual(last_converged(path), (3, 7, 2.04))
+            path.write_text("banner only\n")
+            with self.assertRaises(ValueError):
+                last_converged(path)
+
+    def test_a_checkpoint_resume_replays_what_was_never_checked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config, _, _ = PlaneRestartTests().fixture(root)
+            continued = release_config(config)
+            (root / "solver/gel.mntr").write_text(MONITOR)
+            summary_path = root / "summary.json"
+            summary = json.loads(summary_path.read_text())
+            # The pipeline checked load step 3 up to substep 4; the solver went
+            # on to substep 7 before the run stopped.
+            summary["recorded_substeps"] = [
+                {"time_s": 0.01, "load_step": 3, "substep": 4, "normal_force_n": 1.0}
+            ]
+            summary_path.write_text(json.dumps(summary))
+            frame, _ = validate_plane_resume(root, continued)
+            point, record = validate_plane_resume(root, continued, from_checkpoint=True)
+            self.assertEqual((frame.load_step, frame.substep), (1, 100))
+            self.assertEqual((point.load_step, point.substep), (3, 7))
+            self.assertEqual(point.frame_index, frame.frame_index)
+            # Solver time 2.04 with the preload starting at -2 s is 0.04 s.
+            self.assertAlmostEqual(point.time_s, 0.04)
+            self.assertEqual(point.replay_from_substep, 5)
+            self.assertEqual(record["checkpoint_resumes"][-1]["replayed_from_substep"], 5)
+            # Nothing to replay when the last checked substep is the last one.
+            summary["recorded_substeps"][0]["substep"] = 7
+            summary_path.write_text(json.dumps(summary))
+            point, _ = validate_plane_resume(root, continued, from_checkpoint=True)
+            self.assertIsNone(point.replay_from_substep)
+
+    def test_nothing_is_replayed_without_a_replay_point(self):
+        from gelsight_ansys.plane_restart import PlaneRestart
+
+        point = PlaneRestart(3, 7, 0, 0.04)
+        self.assertEqual(list(AnsysPlane.replay_load_step(Mock(), point)), [])
+
+
 class ResumedSessionTests(unittest.TestCase):
     """A resumed session must connect to the files as the run left them."""
 

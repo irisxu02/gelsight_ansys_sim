@@ -250,6 +250,13 @@ def main(argv=None):
         help="Write NLDIAG files on the resumed model; requires --diagnostic-numerics",
     )
     resume.add_argument(
+        "--from-checkpoint",
+        action="store_true",
+        help="Continue from the solver's last converged load step instead of the last "
+        "saved frame. MAPDL always keeps that one restart point; substeps it converged "
+        "after the last checked one are replayed from gel.rst through the same checks.",
+    )
+    resume.add_argument(
         "--acceptance-override",
         action="store_true",
         help="Permit contact_acceptance to change across the restart. The criterion "
@@ -337,6 +344,7 @@ def main(argv=None):
                 stop_after_s=args.stop_after_s,
                 numerics_override=args.diagnostic_numerics,
                 acceptance_override=args.acceptance_override,
+                from_checkpoint=args.from_checkpoint,
             )
         else:
             directory, summary = rerender(

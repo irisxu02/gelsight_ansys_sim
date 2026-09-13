@@ -71,6 +71,7 @@ def run_plane(
     resume_directory=None,
     numerics_override=False,
     acceptance_override=False,
+    from_checkpoint=False,
 ):
     config.validate()
     case = config.specification
@@ -139,6 +140,7 @@ def run_plane(
             config,
             numerics_override=numerics_override,
             acceptance_override=acceptance_override,
+            from_checkpoint=from_checkpoint,
         )
         previous_elapsed = saved.get("elapsed_s", 0.0)
         saved.update(
@@ -208,6 +210,62 @@ def run_plane(
                 else 0,
             }
             write_json(directory / "summary.json", summary)
+            def record_substep(state, pose, gpu):
+                """Check one converged substep and keep its record."""
+                check, bins = coverage.evaluate(
+                    state,
+                    model.contact_details,
+                    pose,
+                    model.object_mesh,
+                    model.object_displacement,
+                )
+                force = state.contact_force_n.sum(axis=0)
+                record = {
+                    "time_s": state.time_s,
+                    "load_step": state.load_step,
+                    "substep": state.substep,
+                    "normal_force_n": float(-force[2]),
+                    "contact_coverage": check,
+                }
+                if state.time_s >= -1e-10:
+                    if case.requires_contact(state.time_s):
+                        coverage.validate(check)
+                    else:
+                        coverage.validate(check, require_contact=False)
+                    record["contact_required"] = case.requires_contact(state.time_s)
+                    error = float(np.linalg.norm(force + state.backing_reaction_n))
+                    record["force_balance_error_n"] = error
+                    window = case.transient_at(state.time_s)
+                    if window is not None and window.get("inertia", True):
+                        # With mass integrated, contact minus backing is the
+                        # gel's inertial force, not an error. It is recorded,
+                        # and the quasi-static balance is demanded again on
+                        # the first substep after the window - which also
+                        # checks that inertia was not switched off while
+                        # kinetic energy remained.
+                        record["balance_check"] = "inertial_window"
+                    elif error > max(
+                        config.solver.balance_tolerance * np.linalg.norm(force),
+                        1e-6,
+                    ):
+                        raise RuntimeError(
+                            "A recorded plane substep failed force balance"
+                        )
+                    summary["recorded_substeps"].append(record)
+                else:
+                    summary["initialization_substeps"].append(record)
+                if state.substep == 1:
+                    write_json(directory / "summary.json", summary)
+                return state, pose, gpu, check, bins
+
+            if restart and restart.replay_from_substep:
+                # Substeps the solver converged past the last one that was
+                # checked, replayed under the same rules before solving on.
+                summary["phase"] = "replaying"
+                write_json(directory / "summary.json", summary)
+                for state, pose, gpu in model.replay_load_step(restart):
+                    record_substep(state, pose, gpu)
+                write_json(directory / "summary.json", summary)
             for at in solve_times:
                 target = config.physical_pose(float(at))
                 last = None
@@ -215,51 +273,7 @@ def run_plane(
                 summary["target_time_s"] = float(at)
                 write_json(directory / "summary.json", summary)
                 for state, pose, gpu in model.solve_interval(target):
-                    check, bins = coverage.evaluate(
-                        state,
-                        model.contact_details,
-                        pose,
-                        model.object_mesh,
-                        model.object_displacement,
-                    )
-                    force = state.contact_force_n.sum(axis=0)
-                    record = {
-                        "time_s": state.time_s,
-                        "load_step": state.load_step,
-                        "substep": state.substep,
-                        "normal_force_n": float(-force[2]),
-                        "contact_coverage": check,
-                    }
-                    if state.time_s >= -1e-10:
-                        if case.requires_contact(state.time_s):
-                            coverage.validate(check)
-                        else:
-                            coverage.validate(check, require_contact=False)
-                        record["contact_required"] = case.requires_contact(state.time_s)
-                        error = float(np.linalg.norm(force + state.backing_reaction_n))
-                        record["force_balance_error_n"] = error
-                        window = case.transient_at(state.time_s)
-                        if window is not None and window.get("inertia", True):
-                            # With mass integrated, contact minus backing is the
-                            # gel's inertial force, not an error. It is recorded,
-                            # and the quasi-static balance is demanded again on
-                            # the first substep after the window - which also
-                            # checks that inertia was not switched off while
-                            # kinetic energy remained.
-                            record["balance_check"] = "inertial_window"
-                        elif error > max(
-                            config.solver.balance_tolerance * np.linalg.norm(force),
-                            1e-6,
-                        ):
-                            raise RuntimeError(
-                                "A recorded plane substep failed force balance"
-                            )
-                        summary["recorded_substeps"].append(record)
-                    else:
-                        summary["initialization_substeps"].append(record)
-                    last = state, pose, gpu, check, bins
-                    if state.substep == 1:
-                        write_json(directory / "summary.json", summary)
+                    last = record_substep(state, pose, gpu)
                 if last is None or not np.isclose(last[0].time_s, at, rtol=0, atol=1e-9):
                     raise RuntimeError("Missing requested physical-time frame")
                 summary["elapsed_s"] = previous_elapsed + time.perf_counter() - started

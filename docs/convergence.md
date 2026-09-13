@@ -195,6 +195,16 @@ with margin, because a refined window is both where a slide is likely to fail an
 where frames are furthest apart in load steps. It costs tens of megabytes per
 retained load step.
 
+MAPDL's retention itself is not what the documentation describes. With
+`MAXTotalFiles` reached, every further load step overwrote `Jobname.R001`
+rather than rotating through the set: the first twenty-three load steps and the
+last one survived, nothing in between. The one point that is always there is
+therefore the last converged load step, and `resume --from-checkpoint` continues
+from it instead of from the last saved frame. The solve that produced it ran to
+its end before the pipeline stopped, so its later substeps are replayed from
+`gel.rst` through the same contact and balance checks before anything new is
+solved, and the summary records where the replay began.
+
 Two consequences for a setup that wants to stay resumable. Declare a window's
 `solve_interval_s` rather than letting checkpoints fall on every increment, or
 the retained count follows the increment. And keep the sample interval close to
