@@ -63,7 +63,8 @@
   "model_notes": [
     "The contact coefficients match the rigid reference so the texture change is isolated.",
     "Full contact is assessed over the macroscopic footprint; local asperity gaps are permitted.",
-    "Do not replace geometric texture with an increased friction coefficient."
+    "Do not replace geometric texture with an increased friction coefficient.",
+    "At 5 N on the uniform gel mesh this case loses the solve in the press, at about 4.6 N, with gel elements distorting under the asperities: the shortest texture wavelength is 1.0 mm and the gel's in-plane elements are 0.69 mm, 1.4 elements per wavelength against the 8 this surface declares as its minimum and the refined gel mesh the suite says texture accuracy needs. The texture is under-resolved, not the load; opt into gel_mesh: refined before reading anything from this case."
   ],
   "expected_observables": [
     "spatial_pressure_pattern",
