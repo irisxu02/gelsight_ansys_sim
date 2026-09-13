@@ -22,21 +22,21 @@
     "modes": [
       {
         "amplitude_m": 2e-05,
-        "wavelength_x_m": 0.0012,
+        "wavelength_x_m": 0.0072,
         "wavelength_y_m": null,
         "phase_rad": 0
       },
       {
         "amplitude_m": 1e-05,
         "wavelength_x_m": null,
-        "wavelength_y_m": 0.001,
+        "wavelength_y_m": 0.006,
         "phase_rad": 0
       }
     ],
     "zero_reference": "highest_asperity_at_first_touch",
     "minimum_elements_per_shortest_wavelength": 8,
     "texture_motion": "advect_with_specimen",
-    "provenance": "Deterministic synthetic texture; replace with measured surface topography for a named specimen."
+    "provenance": "Deterministic synthetic texture; replace with measured surface topography for a named specimen. Wavelengths are set so the shared 0.69 mm gel mesh resolves them at the declared eight or more elements per wavelength."
   },
   "contact": {
     "friction": {
@@ -64,7 +64,7 @@
     "The contact coefficients match the rigid reference so the texture change is isolated.",
     "Full contact is assessed over the macroscopic footprint; local asperity gaps are permitted.",
     "Do not replace geometric texture with an increased friction coefficient.",
-    "At 5 N on the uniform gel mesh this case loses the solve in the press, at about 4.6 N, with gel elements distorting under the asperities: the shortest texture wavelength is 1.0 mm and the gel's in-plane elements are 0.69 mm, 1.4 elements per wavelength against the 8 this surface declares as its minimum and the refined gel mesh the suite says texture accuracy needs. The texture is under-resolved, not the load; opt into gel_mesh: refined before reading anything from this case."
+    "Texture wavelengths are 7.2 mm along the slide and 6.0 mm across it, 10 and 9 gel elements per wavelength on the shared 0.69 mm mesh. At the original 1.2 and 1.0 mm the mesh held 1.4 elements per wavelength and the gel distorted under the asperities at 4.6 N in the press; a finer texture needs gel_mesh: refined. Amplitudes are unchanged, so the slopes are about five times gentler - a waviness rather than a roughness."
   ],
   "expected_observables": [
     "spatial_pressure_pattern",
