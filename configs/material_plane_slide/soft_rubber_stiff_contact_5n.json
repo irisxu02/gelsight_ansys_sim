@@ -1,0 +1,62 @@
+{
+  "schema_version": 3,
+  "config_kind": "contact_simulation",
+  "name": "plane_soft_rubber_stiff_contact_5n",
+  "calibrated": false,
+  "setup": "suite_5n_stiff_contact.json",
+  "object": {
+    "geometry": {
+      "shape": "plane",
+      "width_m": 0.052,
+      "length_m": 0.028,
+      "thickness_m": 0.003
+    },
+    "material": {
+      "case": "../materials/soft_rubber.json"
+    }
+  },
+  "surface": {
+    "model": "smooth_plane",
+    "height_variation_m": 0
+  },
+  "contact": {
+    "friction": {
+      "model": "coulomb_exponential_velocity_decay",
+      "static_coefficient": 0.6,
+      "kinetic_coefficient": 0.45,
+      "decay_velocity_m_s": 0.001,
+      "coefficient_law": "mu(v) = mu_k + (mu_s - mu_k) * exp(-abs(v) / decay_velocity_m_s)",
+      "anisotropy": "isotropic",
+      "pair": "specimen_surface_against_shared_sensor_surface"
+    },
+    "adhesion": {
+      "model": "none"
+    }
+  },
+  "status": "diagnostic_variant",
+  "runnable_with_current_cli": true,
+  "parameter_origin": "Illustrative synthetic values; not measured properties of a named commercial material.",
+  "material_label": "Soft rubber-like solid, 5 N, stiffened contact",
+  "required_capabilities": [
+    "deformable_flat_slab",
+    "hyperelastic_prony",
+    "mixed_up_gpu_compatibility_check"
+  ],
+  "model_notes": [
+    "Load-controlled at 5 N; travel is an outcome.",
+    "Velocity-weakening friction, as the shared suite specifies.",
+    "Contact penalty raised and the penetration threshold set above what it produces. Contact chattering across the faceted target, not the friction law, is what stopped every earlier slide; loosening the threshold alone cured the chattering but let penetration reach 26 um, which would corrupt the surface the tactile image is rendered from."
+  ],
+  "expected_observables": [
+    "normal_force_vs_travel",
+    "force_relaxation_during_hold",
+    "specimen_deformation_m",
+    "marker_displacement_m"
+  ],
+  "calibration_measurements": [
+    "uniaxial_and_shear_stress_strain",
+    "stress_relaxation",
+    "friction_against_sensor_surface"
+  ],
+  "entry_point": "gelsight-ansys run --config <case.json>"
+}

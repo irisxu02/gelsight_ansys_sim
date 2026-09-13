@@ -1,0 +1,5 @@
+# Standard text handling; generated example datasets are excluded by .gitignore.
+* text=auto
+*.png binary
+*.gif binary
+*.npz binary

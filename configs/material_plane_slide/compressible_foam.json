@@ -1,0 +1,63 @@
+{
+  "schema_version": 3,
+  "config_kind": "contact_simulation",
+  "name": "plane_compressible_foam_press_slide",
+  "calibrated": false,
+  "setup": "suite.json",
+  "object": {
+    "geometry": {
+      "shape": "plane",
+      "width_m": 0.06,
+      "length_m": 0.035,
+      "thickness_m": 0.003
+    },
+    "material": {
+      "case": "../materials/compressible_foam.json"
+    }
+  },
+  "surface": {
+    "model": "smooth_plane",
+    "height_variation_m": 0
+  },
+  "contact": {
+    "friction": {
+      "model": "coulomb_exponential_velocity_decay",
+      "static_coefficient": 0.6,
+      "kinetic_coefficient": 0.45,
+      "decay_velocity_m_s": 0.001,
+      "coefficient_law": "mu(v) = mu_k + (mu_s - mu_k) * exp(-abs(v) / decay_velocity_m_s)",
+      "anisotropy": "isotropic",
+      "pair": "specimen_surface_against_shared_sensor_surface"
+    },
+    "adhesion": {
+      "model": "none"
+    }
+  },
+  "status": "implemented_experimental",
+  "runnable_with_current_cli": true,
+  "parameter_origin": "Illustrative synthetic values; not measured properties of a named commercial material.",
+  "material_label": "Recoverable compressible foam",
+  "required_capabilities": [
+    "deformable_flat_slab",
+    "ogden_hyperfoam",
+    "hyperfoam_prony_compatibility_check"
+  ],
+  "model_notes": [
+    "One-term compressible hyperfoam with provisional shear and bulk relaxation.",
+    "No permanent crushing, pore-fluid transport, or resolved foam cells.",
+    "The adapter must verify the exact ANSYS hyperfoam coefficient convention and Prony compatibility."
+  ],
+  "expected_observables": [
+    "normal_force_vs_travel",
+    "specimen_volume_change",
+    "force_relaxation_during_hold",
+    "marker_displacement_m"
+  ],
+  "calibration_measurements": [
+    "compression_and_lateral_strain",
+    "loading_unloading_hysteresis",
+    "stress_relaxation",
+    "friction_against_sensor_surface"
+  ],
+  "entry_point": "gelsight-ansys run --config <case.json>"
+}

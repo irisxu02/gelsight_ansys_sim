@@ -1,0 +1,57 @@
+{
+  "schema_version": 3,
+  "config_kind": "contact_simulation",
+  "name": "plane_soft_rubber_constant_friction_5n",
+  "calibrated": false,
+  "setup": "suite_force_5n.json",
+  "object": {
+    "geometry": {
+      "shape": "plane",
+      "width_m": 0.052,
+      "length_m": 0.028,
+      "thickness_m": 0.003
+    },
+    "material": {
+      "case": "../materials/soft_rubber.json"
+    }
+  },
+  "surface": {
+    "model": "smooth_plane",
+    "height_variation_m": 0
+  },
+  "contact": {
+    "friction": {
+      "model": "coulomb",
+      "coefficient": 0.45
+    },
+    "adhesion": {
+      "model": "none"
+    }
+  },
+  "status": "diagnostic_variant",
+  "runnable_with_current_cli": true,
+  "parameter_origin": "Illustrative synthetic values; not measured properties of a named commercial material.",
+  "material_label": "Soft rubber-like solid, constant Coulomb friction at 5 N",
+  "required_capabilities": [
+    "deformable_flat_slab",
+    "hyperelastic_prony",
+    "mixed_up_gpu_compatibility_check"
+  ],
+  "model_notes": [
+    "Load-controlled at 5 N; travel is an outcome.",
+    "Constant Coulomb friction. Velocity weakening gives dmu/dv < 0, so a point that starts sliding loses friction and slides more. That positive feedback sits on top of the zero-pressure points the footprint perimeter always carries, whose friction capacity is mu*p = 0 and which therefore flip between open, sliding and sticking as soon as shear is applied. Removing the feedback makes those flips benign.",
+    "The 0.60/0.45 pair it replaces is synthetic: the shared suite records its parameter_origin as illustrative, not measured."
+  ],
+  "expected_observables": [
+    "normal_force_vs_travel",
+    "force_relaxation_during_hold",
+    "specimen_deformation_m",
+    "marker_displacement_m"
+  ],
+  "calibration_measurements": [
+    "uniaxial_and_shear_stress_strain",
+    "stress_relaxation",
+    "friction_against_sensor_surface"
+  ],
+  "entry_point": "gelsight-ansys run --config <case.json>"
+}

@@ -1,0 +1,7 @@
+ansys-mapdl-core==0.74.1
+ansys-mechanical-core==0.13.2
+numpy==2.5.3
+Pillow==12.3.0
+matplotlib==3.11.1
+warp-lang==1.17.0
+ansys-mapdl-reader==0.56.0

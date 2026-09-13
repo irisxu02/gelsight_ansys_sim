@@ -1,0 +1,44 @@
+{
+  "config_kind": "object_material_case",
+  "name": "compressible_foam",
+  "calibrated": false,
+  "material": {
+    "model": "ogden_hyperfoam",
+    "terms": [
+      {
+        "mu_pa": 5000,
+        "alpha": 2,
+        "beta": 0.3333333333333333
+      }
+    ],
+    "modulus_reference": "instantaneous",
+    "density_kg_m3": 150,
+    "formulation": "displacement",
+    "viscoelasticity": {
+      "model": "generalized_maxwell_prony",
+      "normalization": "fractions_of_instantaneous_moduli",
+      "shear_terms": [
+        {
+          "fraction": 0.2,
+          "relaxation_time_s": 0.2
+        },
+        {
+          "fraction": 0.25,
+          "relaxation_time_s": 2
+        }
+      ],
+      "bulk_terms": [
+        {
+          "fraction": 0.15,
+          "relaxation_time_s": 0.2
+        },
+        {
+          "fraction": 0.15,
+          "relaxation_time_s": 2
+        }
+      ],
+      "initial_state": "carry_history_from_preload",
+      "require_positive_equilibrium_moduli": true
+    }
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "schema_version": 3,
+  "config_kind": "contact_simulation",
+  "name": "plane_rigid_short_slide_5n",
+  "calibrated": false,
+  "setup": "suite_5n_rigid_short.json",
+  "object": {
+    "geometry": {
+      "shape": "plane",
+      "width_m": 0.06,
+      "length_m": 0.035,
+      "thickness_m": 0.003
+    },
+    "material": {
+      "case": "../materials/rigid.json"
+    }
+  },
+  "surface": {
+    "model": "smooth_plane",
+    "height_variation_m": 0
+  },
+  "contact": {
+    "friction": {
+      "model": "coulomb_exponential_velocity_decay",
+      "static_coefficient": 0.6,
+      "kinetic_coefficient": 0.45,
+      "decay_velocity_m_s": 0.001,
+      "coefficient_law": "mu(v) = mu_k + (mu_s - mu_k) * exp(-abs(v) / decay_velocity_m_s)",
+      "anisotropy": "isotropic",
+      "pair": "specimen_surface_against_shared_sensor_surface"
+    },
+    "adhesion": {
+      "model": "none"
+    }
+  },
+  "status": "diagnostic_variant",
+  "runnable_with_current_cli": true,
+  "parameter_origin": "Illustrative synthetic values; not measured properties of a named commercial material.",
+  "material_label": "Rigid reference at 5 N, 1 mm slide",
+  "required_capabilities": [],
+  "model_notes": [
+    "Load-controlled at 5 N; travel is an outcome.",
+    "The slide is two phases. From t = 3.00 to 3.09 every one of the 1080 contact points sticks, chattering stays at 0 and each substep converges in two iterations at the full increment. The trouble starts the instant the first points slip, at a global traction ratio of 0.10 against mu_s = 0.6: they are the perimeter points, where the gel's free edge drives pressure to zero and mu*p with it.",
+    "By t = 3.13 the same ring reports an abrupt contact -> no-contact change, immediately followed by a distorted SOLID185 trial iterate. A point that opens releases its stored elastic energy at once, and quasi-statically the rest of the interface must absorb it inside the same equilibrium.",
+    "Mass is what makes that release well posed, so the slide is integrated with inertia. It is also what stick-slip is: a dynamic limit cycle has no quasi-static equivalent.",
+    "Gel elements stay healthy at every converged state - worst corner Jacobian ratio 0.91, none below 0.5 - so the distortion lives in rejected iterates and refining the gel mesh would not address it."
+  ],
+  "expected_observables": [
+    "normal_force_n",
+    "tangential_force_n",
+    "marker_displacement_m"
+  ],
+  "calibration_measurements": [
+    "normal_load_vs_travel",
+    "static_and_kinetic_friction_at_multiple_loads_and_speeds"
+  ],
+  "entry_point": "gelsight-ansys run --config <case.json>"
+}

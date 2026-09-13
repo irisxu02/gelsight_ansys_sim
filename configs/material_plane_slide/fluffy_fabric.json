@@ -1,0 +1,72 @@
+{
+  "schema_version": 3,
+  "config_kind": "contact_simulation",
+  "name": "plane_fluffy_fabric_press_slide",
+  "calibrated": false,
+  "setup": "suite.json",
+  "object": {
+    "geometry": {
+      "shape": "plane",
+      "width_m": 0.06,
+      "length_m": 0.035,
+      "thickness_m": 0.003
+    },
+    "material": {
+      "case": "../materials/fluffy_fabric.json"
+    }
+  },
+  "surface": {
+    "model": "homogenized_planar_pile_envelope",
+    "resolved_individual_fibers": false,
+    "height_variation_m": 0
+  },
+  "contact": {
+    "friction": {
+      "model": "orthotropic_coulomb_exponential_velocity_decay",
+      "material_axes": "same_as_bulk_material",
+      "x": {
+        "static_coefficient": 0.6,
+        "kinetic_coefficient": 0.45
+      },
+      "y": {
+        "static_coefficient": 0.9,
+        "kinetic_coefficient": 0.7
+      },
+      "decay_velocity_m_s": 0.001,
+      "friction_limit": "elliptical_in_material_xy_axes",
+      "coefficient_law": "mu_axis(v) = mu_k_axis + (mu_s_axis - mu_k_axis) * exp(-abs(v) / decay_velocity_m_s)",
+      "pair": "specimen_surface_against_shared_sensor_surface"
+    },
+    "adhesion": {
+      "model": "none"
+    }
+  },
+  "status": "implemented_experimental",
+  "runnable_with_current_cli": true,
+  "parameter_origin": "Illustrative synthetic values; not measured properties of a named commercial material.",
+  "material_label": "Homogenized fluffy fabric or felt",
+  "required_capabilities": [
+    "deformable_flat_slab",
+    "finite_strain_orthotropic_compaction_law",
+    "orthotropic_relaxation",
+    "orthotropic_friction"
+  ],
+  "model_notes": [
+    "Effective continuum approximation to compaction and directional shear; individual fiber impressions are not resolved.",
+    "A constitutive adapter must supply and validate the full finite-strain energy/stress update; the compression table alone is insufficient.",
+    "The x-only trajectory probes one material direction; a later y-slide is needed to identify anisotropy."
+  ],
+  "expected_observables": [
+    "progressive_compaction",
+    "normal_force_vs_travel",
+    "force_relaxation_during_hold",
+    "directional_shear_response"
+  ],
+  "calibration_measurements": [
+    "compression_and_lateral_strain",
+    "xy_xz_yz_shear",
+    "stress_relaxation",
+    "friction_in_both_material_directions"
+  ],
+  "entry_point": "gelsight-ansys run --config <case.json>"
+}

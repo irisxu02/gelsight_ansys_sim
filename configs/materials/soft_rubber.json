@@ -1,0 +1,39 @@
+{
+  "config_kind": "object_material_case",
+  "name": "soft_rubber",
+  "calibrated": false,
+  "material": {
+    "model": "neo_hookean",
+    "young_pa": 50000,
+    "poisson": 0.49,
+    "modulus_reference": "instantaneous",
+    "density_kg_m3": 1100,
+    "formulation": "mixed_up",
+    "viscoelasticity": {
+      "model": "generalized_maxwell_prony",
+      "normalization": "fractions_of_instantaneous_moduli",
+      "shear_terms": [
+        {
+          "fraction": 0.1,
+          "relaxation_time_s": 0.2
+        },
+        {
+          "fraction": 0.15,
+          "relaxation_time_s": 2
+        }
+      ],
+      "bulk_terms": [
+        {
+          "fraction": 0,
+          "relaxation_time_s": 0.2
+        },
+        {
+          "fraction": 0,
+          "relaxation_time_s": 2
+        }
+      ],
+      "initial_state": "carry_history_from_preload",
+      "require_positive_equilibrium_moduli": true
+    }
+  }
+}

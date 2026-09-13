@@ -1,0 +1,54 @@
+# Python environments and caches
+.venv/
+.venv-*/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local results, license configuration, and diagnostic artifacts
+outputs/
+output/
+logs/
+private/
+*.log
+*.out
+*.err
+*.lic
+*.opt
+.env
+.env.*
+!.env.example
+*.local.*
+
+# Generated documentation metadata (source presets in configs/ stay in Git)
+/docs/**/*.json
+
+# Local material-property research atlas
+/docs/material-taxonomy/
+
+# Example exports are local datasets; publish only curated documentation assets.
+# Ignore future raw-data formats and frame directories by default as well.
+/docs/examples/*
+!/docs/examples/*.md
+!/docs/examples/*/
+/docs/examples/*/*
+!/docs/examples/*/*.md
+!/docs/examples/*/preview.png
+!/docs/examples/*/process.gif
+!/docs/examples/*/force_curve.png
+!/docs/examples/*/raw_vs_subtracted.png
+!/docs/examples/*/raw_vs_subtracted.gif
+!/docs/examples/*/tactile.gif
+
+# Editor and operating-system state
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

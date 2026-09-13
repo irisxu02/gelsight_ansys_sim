@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gelsight-ansys"
+version = "0.1.0"
+description = "ANSYS finite-element gel contact and GPU tactile rendering"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["ansys-mapdl-core==0.74.1", "ansys-mapdl-reader==0.56.0", "numpy>=1.26", "Pillow>=10", "matplotlib>=3.8", "psutil>=5.9"]
+
+[project.optional-dependencies]
+gpu = ["warp-lang>=1.17"]
+mechanical = ["ansys-mechanical-core==0.13.2"]
+
+[project.scripts]
+gelsight-ansys = "gelsight_ansys.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+gelsight_ansys = ["data/mini/*.png", "data/mini/*.npz", "data/mini/*.md", "data/mini/LICENSE", "native/*.c"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 90
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*.py" = ["E402"]
+"tests/*.py" = ["E402"]
+"src/gelsight_ansys/*_cuda.py" = ["RUF046"] # Warp needs explicit mutable scalar constructors

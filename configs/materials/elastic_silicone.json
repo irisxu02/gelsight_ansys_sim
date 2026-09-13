@@ -1,0 +1,12 @@
+{
+  "config_kind": "object_material_case",
+  "name": "elastic_silicone",
+  "calibrated": false,
+  "material": {
+    "model": "neo_hookean",
+    "young_pa": 50000,
+    "poisson": 0.45,
+    "mooney_fraction": 0.2,
+    "formulation": "displacement"
+  }
+}

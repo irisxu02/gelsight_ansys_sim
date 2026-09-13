@@ -1,0 +1,61 @@
+{
+  "schema_version": 3,
+  "config_kind": "contact_simulation",
+  "name": "plane_soft_rubber_force_controlled_5n",
+  "calibrated": false,
+  "setup": "suite_force_5n.json",
+  "object": {
+    "geometry": {
+      "shape": "plane",
+      "width_m": 0.052,
+      "length_m": 0.028,
+      "thickness_m": 0.003
+    },
+    "material": {
+      "case": "../materials/soft_rubber.json"
+    }
+  },
+  "surface": {
+    "model": "smooth_plane",
+    "height_variation_m": 0
+  },
+  "contact": {
+    "friction": {
+      "model": "coulomb_exponential_velocity_decay",
+      "static_coefficient": 0.6,
+      "kinetic_coefficient": 0.45,
+      "decay_velocity_m_s": 0.001,
+      "coefficient_law": "mu(v) = mu_k + (mu_s - mu_k) * exp(-abs(v) / decay_velocity_m_s)",
+      "anisotropy": "isotropic",
+      "pair": "specimen_surface_against_shared_sensor_surface"
+    },
+    "adhesion": {
+      "model": "none"
+    }
+  },
+  "status": "diagnostic_variant",
+  "runnable_with_current_cli": true,
+  "parameter_origin": "Illustrative synthetic values; not measured properties of a named commercial material.",
+  "material_label": "Soft rubber-like solid, load-controlled at 5 N",
+  "required_capabilities": [
+    "deformable_flat_slab",
+    "hyperelastic_prony",
+    "mixed_up_gpu_compatibility_check"
+  ],
+  "model_notes": [
+    "Near-incompressible rubber approximation; all relaxation parameters need fitting.",
+    "Load-controlled: the platen carries a commanded 5 N and its travel is an outcome, so the same protocol transfers to any specimen material."
+  ],
+  "expected_observables": [
+    "normal_force_vs_travel",
+    "force_relaxation_during_hold",
+    "specimen_deformation_m",
+    "marker_displacement_m"
+  ],
+  "calibration_measurements": [
+    "uniaxial_and_shear_stress_strain",
+    "stress_relaxation",
+    "friction_against_sensor_surface"
+  ],
+  "entry_point": "gelsight-ansys run --config <case.json>"
+}

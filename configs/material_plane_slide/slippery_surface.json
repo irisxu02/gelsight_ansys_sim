@@ -1,0 +1,54 @@
+{
+  "schema_version": 3,
+  "config_kind": "contact_simulation",
+  "name": "plane_slippery_surface_press_slide",
+  "calibrated": false,
+  "setup": "suite.json",
+  "object": {
+    "geometry": {
+      "shape": "plane",
+      "width_m": 0.06,
+      "length_m": 0.035,
+      "thickness_m": 0.003
+    },
+    "material": {
+      "case": "../materials/rigid.json"
+    }
+  },
+  "surface": {
+    "model": "smooth_plane",
+    "height_variation_m": 0
+  },
+  "contact": {
+    "friction": {
+      "model": "coulomb_exponential_velocity_decay",
+      "static_coefficient": 0.12,
+      "kinetic_coefficient": 0.08,
+      "decay_velocity_m_s": 0.001,
+      "coefficient_law": "mu(v) = mu_k + (mu_s - mu_k) * exp(-abs(v) / decay_velocity_m_s)",
+      "anisotropy": "isotropic",
+      "pair": "specimen_surface_against_shared_sensor_surface"
+    },
+    "adhesion": {
+      "model": "none"
+    }
+  },
+  "status": "implemented_experimental",
+  "runnable_with_current_cli": true,
+  "parameter_origin": "Illustrative synthetic values; not measured properties of a named commercial material.",
+  "material_label": "Slippery smooth surface",
+  "required_capabilities": [],
+  "model_notes": [
+    "Only the friction coefficients differ from the rigid reference.",
+    "No liquid film or hydrodynamic lubrication is modeled."
+  ],
+  "expected_observables": [
+    "slip_onset",
+    "tangential_force_n",
+    "marker_displacement_m"
+  ],
+  "calibration_measurements": [
+    "static_and_kinetic_friction_at_multiple_loads_and_speeds"
+  ],
+  "entry_point": "gelsight-ansys run --config <case.json>"
+}

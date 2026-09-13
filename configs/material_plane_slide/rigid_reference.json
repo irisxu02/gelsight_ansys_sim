@@ -1,0 +1,54 @@
+{
+  "schema_version": 3,
+  "config_kind": "contact_simulation",
+  "name": "plane_rigid_reference_press_slide",
+  "calibrated": false,
+  "setup": "suite.json",
+  "object": {
+    "geometry": {
+      "shape": "plane",
+      "width_m": 0.06,
+      "length_m": 0.035,
+      "thickness_m": 0.003
+    },
+    "material": {
+      "case": "../materials/rigid.json"
+    }
+  },
+  "surface": {
+    "model": "smooth_plane",
+    "height_variation_m": 0
+  },
+  "contact": {
+    "friction": {
+      "model": "coulomb_exponential_velocity_decay",
+      "static_coefficient": 0.6,
+      "kinetic_coefficient": 0.45,
+      "decay_velocity_m_s": 0.001,
+      "coefficient_law": "mu(v) = mu_k + (mu_s - mu_k) * exp(-abs(v) / decay_velocity_m_s)",
+      "anisotropy": "isotropic",
+      "pair": "specimen_surface_against_shared_sensor_surface"
+    },
+    "adhesion": {
+      "model": "none"
+    }
+  },
+  "status": "implemented_experimental",
+  "runnable_with_current_cli": true,
+  "parameter_origin": "Illustrative synthetic values; not measured properties of a named commercial material.",
+  "material_label": "Rigid, smooth reference",
+  "required_capabilities": [],
+  "model_notes": [
+    "Reference geometry and interface for controlled comparisons; it is not a specific metal or plastic."
+  ],
+  "expected_observables": [
+    "normal_force_n",
+    "tangential_force_n",
+    "marker_displacement_m"
+  ],
+  "calibration_measurements": [
+    "normal_load_vs_travel",
+    "static_and_kinetic_friction_at_multiple_loads_and_speeds"
+  ],
+  "entry_point": "gelsight-ansys run --config <case.json>"
+}

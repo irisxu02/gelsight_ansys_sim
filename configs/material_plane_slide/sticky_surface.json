@@ -1,0 +1,69 @@
+{
+  "schema_version": 3,
+  "config_kind": "contact_simulation",
+  "name": "plane_sticky_surface_press_slide",
+  "calibrated": false,
+  "setup": "suite.json",
+  "object": {
+    "geometry": {
+      "shape": "plane",
+      "width_m": 0.06,
+      "length_m": 0.035,
+      "thickness_m": 0.003
+    },
+    "material": {
+      "case": "../materials/rigid.json"
+    }
+  },
+  "surface": {
+    "model": "smooth_plane",
+    "height_variation_m": 0
+  },
+  "contact": {
+    "friction": {
+      "model": "coulomb_exponential_velocity_decay",
+      "static_coefficient": 0.6,
+      "kinetic_coefficient": 0.45,
+      "decay_velocity_m_s": 0.001,
+      "coefficient_law": "mu(v) = mu_k + (mu_s - mu_k) * exp(-abs(v) / decay_velocity_m_s)",
+      "anisotropy": "isotropic",
+      "pair": "specimen_surface_against_shared_sensor_surface"
+    },
+    "adhesion": {
+      "model": "reversible_short_range_adhesive_contact",
+      "normal_law": "linear_attraction_with_tensile_strength_at_zero_gap",
+      "tensile_strength_pa": 5000,
+      "work_of_adhesion_j_m2": 0.05,
+      "cutoff_gap_m": 2e-05,
+      "normal_traction_law": "t_n(g) = -tensile_strength_pa*(1-g/cutoff_gap_m) for 0<=g<=cutoff_gap_m; attraction=0 beyond cutoff; superpose repulsive contact for penetration",
+      "cohesive_shear_strength_pa": 3000,
+      "tangential_limit_law": "tau_limit = mu(v)*repulsive_contact_pressure + attached_fraction*cohesive_shear_strength_pa",
+      "attached_fraction_law": "clamp(1-max(g,0)/cutoff_gap_m,0,1)",
+      "healing": "reversible_on_recontact",
+      "irreversible_damage": false
+    }
+  },
+  "status": "implemented_experimental",
+  "runnable_with_current_cli": true,
+  "parameter_origin": "Illustrative synthetic values; not measured properties of a named commercial material.",
+  "material_label": "Sticky smooth surface",
+  "required_capabilities": [
+    "reversible_adhesive_frictional_contact"
+  ],
+  "model_notes": [
+    "Proposed reversible interface law requires a validated adapter; ordinary permanent bonded contact is unsuitable.",
+    "Use repulsive contact pressure in the friction bound, not net pressure after subtracting adhesion.",
+    "No release occurs in this suite, so pull-off strength and detachment cannot be validated by these examples."
+  ],
+  "expected_observables": [
+    "tangential_force_n",
+    "slip_onset",
+    "marker_displacement_m"
+  ],
+  "calibration_measurements": [
+    "normal_pull_off_and_recontact",
+    "work_of_adhesion",
+    "shear_under_multiple_normal_loads"
+  ],
+  "entry_point": "gelsight-ansys run --config <case.json>"
+}

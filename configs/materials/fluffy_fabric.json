@@ -1,0 +1,85 @@
+{
+  "config_kind": "object_material_case",
+  "name": "fluffy_fabric",
+  "calibrated": false,
+  "material": {
+    "model": "homogenized_orthotropic_fibrous_layer",
+    "material_axes": "x=slide_and_preferred_fiber_direction, y=transverse, z=thickness",
+    "density_kg_m3": 80,
+    "instantaneous_young_pa": {
+      "x": 30000,
+      "y": 15000,
+      "z": 10000
+    },
+    "instantaneous_shear_pa": {
+      "xy": 5000,
+      "xz": 2000,
+      "yz": 4000
+    },
+    "poisson": {
+      "xy": 0.1,
+      "xz": 0.1,
+      "yz": 0.1
+    },
+    "reciprocal_poisson_ratios": "derive_from_symmetric_compliance",
+    "through_thickness_compression": {
+      "strain_measure": "engineering_compression_positive",
+      "stress_measure": "nominal_compressive_stress_positive",
+      "strain_stress_pa": [
+        [
+          0,
+          0
+        ],
+        [
+          0.05,
+          500
+        ],
+        [
+          0.15,
+          1600
+        ],
+        [
+          0.3,
+          4000
+        ],
+        [
+          0.5,
+          15000
+        ],
+        [
+          0.7,
+          60000
+        ]
+      ],
+      "curve_role": "replace_z_compression_branch; do_not_add_to_linear_z_response",
+      "interpolation": "monotone",
+      "out_of_range": "reject"
+    },
+    "viscoelasticity": {
+      "model": "generalized_maxwell_prony",
+      "normalization": "fractions_of_instantaneous_moduli",
+      "shear_terms": [
+        {
+          "fraction": 0.2,
+          "relaxation_time_s": 0.2
+        },
+        {
+          "fraction": 0.25,
+          "relaxation_time_s": 2
+        }
+      ],
+      "bulk_terms": [
+        {
+          "fraction": 0.15,
+          "relaxation_time_s": 0.2
+        },
+        {
+          "fraction": 0.15,
+          "relaxation_time_s": 2
+        }
+      ],
+      "initial_state": "carry_history_from_preload",
+      "require_positive_equilibrium_moduli": true
+    }
+  }
+}

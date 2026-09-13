@@ -1,0 +1,8 @@
+{
+  "config_kind": "object_material_case",
+  "name": "rigid",
+  "calibrated": false,
+  "material": {
+    "model": "rigid"
+  }
+}
