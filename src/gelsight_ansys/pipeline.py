@@ -318,7 +318,11 @@ def resume_run(
     elif config.to_dict() != original.to_dict():
         raise ValueError("Non-plane resume requires the unchanged saved configuration")
     directory = create_run(output, config)
-    shutil.copytree(source, directory, dirs_exist_ok=True)
+    # An interrupted run is the only kind that gets resumed, and an interrupted
+    # MAPDL leaves its lock file behind; PyMAPDL refuses to launch over one.
+    shutil.copytree(
+        source, directory, dirs_exist_ok=True, ignore=shutil.ignore_patterns("*.lock")
+    )
     return run(
         config,
         output,

@@ -134,6 +134,29 @@ class CheckpointResumeTests(unittest.TestCase):
         self.assertEqual(list(AnsysPlane.replay_load_step(Mock(), point)), [])
 
 
+class ResumeCopyTests(unittest.TestCase):
+    def test_the_solver_lock_of_an_interrupted_run_is_not_carried_over(self):
+        """PyMAPDL refuses to launch over a lock file, and an interrupted run has one."""
+        from gelsight_ansys.pipeline import resume_run
+
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as out:
+            root = Path(tmp)
+            config, _, _ = PlaneRestartTests().fixture(root)
+            (root / "solver/gel.lock").write_text("pid")
+            (root / "solver/gel.rdb").write_bytes(b"db")
+            seen = {}
+
+            def fake_run(cfg, output, *args, **kwargs):
+                seen["directory"] = Path(kwargs["resume_directory"])
+                return seen["directory"], {}
+
+            with patch("gelsight_ansys.pipeline.run", fake_run):
+                resume_run(root, Path(out), None, config=release_config(config))
+            copied = seen["directory"] / "solver"
+            self.assertTrue((copied / "gel.rdb").is_file())
+            self.assertFalse((copied / "gel.lock").exists())
+
+
 class ResumedSessionTests(unittest.TestCase):
     """A resumed session must connect to the files as the run left them."""
 
