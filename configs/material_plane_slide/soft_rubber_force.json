@@ -1,14 +1,14 @@
 {
   "schema_version": 3,
   "config_kind": "contact_simulation",
-  "name": "plane_soft_rubber_fine_slide_5n",
+  "name": "plane_soft_rubber_force_control",
   "calibrated": false,
-  "setup": "suite_5n_fine_slide.json",
+  "setup": "suite_force.json",
   "object": {
     "geometry": {
       "shape": "plane",
-      "width_m": 0.052,
-      "length_m": 0.028,
+      "width_m": 0.06,
+      "length_m": 0.035,
       "thickness_m": 0.003
     },
     "material": {
@@ -33,20 +33,18 @@
       "model": "none"
     }
   },
-  "status": "diagnostic_variant",
+  "status": "capability_example",
   "runnable_with_current_cli": true,
   "parameter_origin": "Illustrative synthetic values; not measured properties of a named commercial material.",
-  "material_label": "Soft rubber-like solid, 5 N, finely stepped slide onset",
+  "material_label": "Soft rubber, load controlled",
   "required_capabilities": [
     "deformable_flat_slab",
     "hyperelastic_prony",
     "mixed_up_gpu_compatibility_check"
   ],
   "model_notes": [
-    "Load-controlled at 5 N; travel is an outcome.",
-    "Velocity-weakening friction, as the shared suite specifies.",
-    "Contact penalty raised and the penetration threshold set above what it produces. Contact chattering across the faceted target, not the friction law, is what stopped every earlier slide; loosening the threshold alone cured the chattering but let penetration reach 26 um, which would corrupt the surface the tactile image is rendered from.",
-    "The slide onset uses a quarter of the press time step. Contact chattering is measured per load step, so a shorter step is the most direct control on it; the stiffer penalty alone lowered the level from 12 to 6-10 at the same distance but still lost the step."
+    "Commanded normal load; travel is an outcome, recorded per frame as platen_travel_m.",
+    "Travel at a given load is a property of the specimen: this material settles near 0.29 mm at 5 N where a rigid one settles near 0.09 mm."
   ],
   "expected_observables": [
     "normal_force_vs_travel",

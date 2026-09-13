@@ -49,8 +49,10 @@ def discover(configs, scale):
             "object_material_case",
         ):
             continue  # Suite metadata; its individual cases are listed below.
-        if data.get("status") == "diagnostic_variant":
-            continue  # A controlled comparison against a preset, not a dataset.
+        if data.get("status") in ("diagnostic_variant", "capability_example"):
+            # A controlled comparison against a preset, or a worked example of a
+            # control mode. Neither is one of the curated dataset presets.
+            continue
         if data.get("runnable_with_current_cli") is False:
             blocked.append(
                 {

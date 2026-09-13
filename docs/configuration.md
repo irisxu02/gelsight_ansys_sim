@@ -151,6 +151,21 @@ mechanical checkpoints but save 121 frames over the six-second interval.
 Every converged internal state still receives the mechanical acceptance checks.
 See [sampling CLI options](usage.md#mechanical-steps-and-saved-frames).
 
+## Control modes
+
+The shipped presets share `suite.json`, which drives the platen by travel and
+solves quasi-statically. Two capability examples sit beside them, each on its own
+setup, for the cases that needs something else:
+
+| Example | Setup | For |
+|---|---|---|
+| `soft_rubber_force.json` | `suite_force.json` | Commanding a normal *load* instead of a travel, so one protocol transfers across materials and travel is measured |
+| `soft_rubber_transient.json` | `suite_transient.json` | Integrating the slide onset with mass, for stick-slip and for contact events a quasi-static solve cannot pass |
+
+They carry `"status": "capability_example"` so preset discovery and export leave
+them alone. [Convergence](convergence.md) explains when each is the right choice
+and how to size a transient window.
+
 ## Custom object meshes
 
 Set `object.geometry.shape` to `"mesh"` and use the same `run --config` command.

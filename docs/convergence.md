@@ -169,8 +169,9 @@ load step, which is every solve checkpoint, while a frame is written every
 sample interval. A slide window sampled every 0.05 s with 0.005 s checkpoints
 puts ten load steps between frames.
 
-With `MAXFILES` at 2 the resume never worked. A run that stopped eight load steps
-past its last frame had load steps 193 and 194 on disk and wanted 186:
+A solve also runs on past its last saved frame before it fails, so the count has
+to cover the frame-to-frame gap and then some. Too few and every resume fails
+the same way, with everything else about it correct:
 
 ```
 *** ERROR ***
@@ -178,18 +179,16 @@ No restart file found matching loadstep and substep specified in the
 ANTYPE,,REST command.  Restart cannot be performed.
 ```
 
-Everything else about that resume was correct — `RESUME,gel,rdb`, `SET,186,50`,
-the restated controls, `ANTYPE,,REST,186,50,CONTINUE`, `TIMINT,ON` — and it still
-could not start. The count is now derived from the widest frame-to-frame gap in
-checkpoints, doubled with margin, because the refined window is both where a
-slide fails and where frames are furthest apart. That is tens of megabytes per
-retained load step, spent to be able to resume at all.
+The count is derived from the widest frame-to-frame gap in checkpoints, doubled
+with margin, because a refined window is both where a slide is likely to fail and
+where frames are furthest apart in load steps. It costs tens of megabytes per
+retained load step.
 
 Two consequences for a setup that wants to stay resumable. Declare a window's
 `solve_interval_s` rather than letting checkpoints fall on every increment, or
-the retained count follows the increment. And keep the sample interval close
-enough to the checkpoint interval that the gap is small — the state that has to
-survive is proportional to it.
+the retained count follows the increment. And keep the sample interval close to
+the checkpoint interval — the state that has to survive is proportional to the
+gap between them.
 
 ## Fixture and acceptance
 
@@ -210,26 +209,28 @@ and `required_active_bin_fraction` is 1. For a press that is a fair statement
 that the specimen is seated. A slide breaks it, and the break is at the gel's
 free corners rather than anywhere the dataset looks.
 
-Measured on the rigid 5 N reference, at 125 um of slide:
+The gel is 25.25 x 20.75 mm and the camera sees 18.6 x 14.3 mm of it, so a ring
+several millimetres wide is outside every frame the dataset holds. That ring is
+where the pressure goes first. On a rigid specimen at 5 N, after 125 um of
+slide:
 
 | | Inside the camera field of view | Outside it |
 |---|---|---|
 | Contact elements | 520 | 560 |
 | Minimum pressure | 7.39 kPa | 1.57 kPa |
 
-against a 16.8 kPa peak, and the twenty least loaded elements were all outside
-the view — the weakest sitting on the gel corner, 3 mm beyond its edge. The gel
-is 25.25 x 20.75 mm and the camera sees 18.6 x 14.3 mm of it, so the ring that
-unloads is a ring the dataset never records. The weakest bin decays smoothly
-from 930 uN to 1 uN across 85 ms, so lowering the threshold buys milliseconds,
-not a protocol.
+against a 16.8 kPa peak, with the twenty least loaded elements all outside the
+view and the weakest of them on a corner. Lowering `minimum_bin_force_n` does not
+help: the weakest bin decays smoothly through six decades, so a factor of ten
+buys milliseconds.
 
-It is not a tilt. One reading of this would be that friction acts at the gel
-surface while the platen reaction acts above it, and the couple unloads the
-trailing half. The pressure field says otherwise: across the same 100 um the
-profile is unchanged and the two halves differ by 0.2%, because the platen's
-rotational constraint takes the moment. What collapses is local to the free
-corner, which is also where the slip ring nucleates.
+It is worth being clear about what does *not* cause this, because the obvious
+reading is wrong. Friction acts at the gel surface while the platen reaction acts
+above it, which looks like a couple that should tilt the pressure field and
+unload the trailing half. It does not: across the same 125 um the profile is
+unchanged and the two halves of the footprint differ by 0.2%, because the
+platen's rotational constraint takes the moment. What collapses is local to the
+free corner, which is also where the slip ring nucleates.
 
 So a setup that slides may declare which region the requirement speaks for:
 
@@ -258,9 +259,11 @@ the scoped one. Omit `region` and nothing changes.
 
 Load control removes the per-material travel calibration. Equal travel is not
 equal load — a rigid specimen leaves the gel carrying everything while foam
-absorbs most of it — so matching materials at a force otherwise needs one
-measured force-travel curve each (`scripts/calibrate_normal_force.py`). Under
-load control the same protocol transfers to any specimen.
+absorbs most of it — so matching materials at a force under travel control needs
+a measured force-travel curve per material, and a preset that is only correct
+for the material it was fitted to. Under load control the same protocol
+transfers to any specimen: at 5 N the rigid reference settles at 0.092 mm of
+travel and soft rubber at 0.293 mm, both read back rather than commanded.
 
 Two segments stay travel-driven whatever the mode, and the schema enforces it:
 
@@ -289,20 +292,18 @@ fixed for the life of a model and cannot be changed on a restart.
 ## Inertia: studying stick-slip instead of avoiding it
 
 A sliding contact loses its quasi-static path long before the interface breaks
-out as a whole, and the measured runs say where. In the rigid 5 N reference the
-slide divides into two phases:
+out as a whole. The slide divides into two phases:
 
-| Physical time | Slide | Interface | Iterations per substep |
-|---|---|---|---|
-| 3.000-3.090 | 0-100 um | 1080 of 1080 points sticking, chattering 0 | 2, at the full increment |
-| 3.090 onward | 100 um onward | the perimeter slips, then opens | 4 to 24, bisecting to 60 us |
+| Interface | Cost |
+|---|---|
+| Every contact point sticking, chattering at zero | two iterations a substep, at the full increment |
+| The perimeter slipping, then opening | four to twenty-four, bisecting to a fraction of the increment |
 
 The stick phase converges like a linear problem. The trouble begins at the first
-status change, and at that instant the global traction ratio is 0.10 against a
-static coefficient of 0.6 — nowhere near breakout. The points that move are the
-ones around the rim of the contact, where the gel's free edge takes pressure to
-zero and takes `mu * p` with it. Roughly forty micrometres of slide later the
-same ring reports
+status change, and at that instant the global traction ratio can be a sixth of
+the static coefficient — nowhere near breakout. The points that move are around
+the rim of the contact, where the gel's free edge takes pressure to zero and
+takes `mu * p` with it. Tens of micrometres of slide later the same ring reports
 
 ```
 Contact element N status changes abruptly from contact -> no-contact
@@ -312,13 +313,13 @@ Element M (type = 1, SOLID185) has become highly distorted
 in that order, and the acceptance check independently reports inactive
 macroscopic contact bins.
 
-That ordering is the whole diagnosis. A point that opens releases its stored
-elastic energy in a single instant; quasi-statically the rest of the interface
-has to absorb it inside the same equilibrium, and the trial displacement that
-Newton proposes turns a gel element inside out. Offline Jacobian analysis of the
-saved bodies confirms the elements are healthy at every *converged* state — worst
-corner ratio 0.91, none below 0.5 — so the distortion exists only in rejected
-iterates, and refining the gel mesh does not address it.
+That ordering is the diagnosis. A point that opens releases its stored elastic
+energy in a single instant; quasi-statically the rest of the interface has to
+absorb it inside the same equilibrium, and the trial displacement Newton then
+proposes turns a gel element inside out. The elements are healthy at every
+*converged* state — worst corner Jacobian ratio around 0.9, none below 0.5 — so
+the distortion exists only in rejected iterates, and refining the gel mesh does
+not address it.
 
 Contact stabilization damping, load control, penalty stiffness, penetration
 tolerance, pair symmetry and a rigid single-quad target all leave this intact,
@@ -342,18 +343,22 @@ time integration on inside a window and off everywhere else. `frame_times`
 refines to the window's `sample_interval_s`; outside it the declared schedule is
 unchanged.
 
-Switch inertia on inside a quiet stretch, not at the event it is there to carry.
-The shipped rigid window opens at 3.05, forty milliseconds before the first
-contact status change, so the transition into transient and the first slip are
-not the same load step.
+Switch inertia on inside a quiet stretch, not at the event it is there to carry,
+so that the transition into transient and the first contact status change are not
+the same load step.
 
 **`solve_interval_s`.** A checkpoint is one `SOLVE` and one gRPC round trip, and
 by default `solve_times` refines to the window's increment — one round trip per
 increment, which at 0.1 ms over a quarter second is 2500 of them. A window that
 declares `solve_interval_s` keeps the checkpoint grid at that spacing and lets
 `DELTIM` subdivide inside each `SOLVE` instead: 5 ms checkpoints over a 0.1 ms
-increment is fifty substeps per call, and bisection still reaches 0.5 us. It may
-not be finer than `time_increment_s`. Omit it and the old behaviour stands.
+increment is fifty substeps per call, and bisection still reaches 0.5 us.
+
+It may not be finer than `time_increment_s`, and `sample_interval_s` must be a
+whole multiple of it: a frame is written from the state a checkpoint leaves
+behind, so a frame between checkpoints is never written at all. Both intervals
+must also divide the window's span, or the grid is built at a spacing nobody
+declared. Omit `solve_interval_s` and checkpoints fall on every increment.
 
 ### Sizing a window
 
@@ -396,13 +401,14 @@ on top of them.
 
 The window is dynamic, and the shared suite declares inertial stick-slip out of
 its scope. A setup that opens one is studying that behaviour deliberately and
-should say so in its notes.
+should say so in its notes; `configs/material_plane_slide/suite_transient.json`
+is the shipped example.
 
 The measurement is the tangential-to-normal force ratio through the release: it
 should rise to the static coefficient as the interface breaks out and settle
 toward the kinetic one as sliding establishes. Recorded frames carry
 `sliding_contact_points` and `sticking_contact_points`, so the breakout instant
-is visible directly — and, as the rigid reference shows, the first points to move
-leave stick at a fraction of the static coefficient because they sit where the
-pressure is near zero. Read the ratio against the whole interface, and the point
-counts to see how far in the slip ring has grown.
+is visible directly. Expect the first points to leave stick at a fraction of the
+static coefficient, because they sit at the rim where the pressure is near zero:
+read the ratio as a statement about the whole interface, and the point counts to
+see how far in the slip ring has grown.

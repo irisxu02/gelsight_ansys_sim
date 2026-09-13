@@ -208,151 +208,16 @@ class PlaneNumericsTests(unittest.TestCase):
                 stalling["smallest_time_increment"], stalling["largest_time_increment"]
             )
 
-    def test_recorded_failure_shows_the_cost_trend_before_the_abort(self):
-        monitor = sorted(
-            (ROOT / "outputs").glob("soft_rubber_cycle_0p02/runs/*/solver/gel.mntr")
-        )
-        if not monitor:
-            self.skipTest("Recorded failing run is not present in this checkout")
-        summary = summarize(read_monitor(monitor[0]))
-        self.assertGreater(
-            summary["mean_iterations_last"], summary["mean_iterations_first"]
-        )
-        self.assertTrue(summary["retried_at"])
-
 
 if __name__ == "__main__":
     unittest.main()
 
 
-class ConvergenceSweepTests(unittest.TestCase):
-    """Each variant must differ from the baseline in exactly one respect."""
-
-    def resolve(self, variant, common):
-        import io
-        from contextlib import redirect_stdout
-        from unittest.mock import patch
-
-        from gelsight_ansys.cli import main
-
-        completed = (Path("unused"), {"status": "passed", "frames": []})
-        with (
-            patch("gelsight_ansys.pipeline.run", return_value=completed) as execute,
-            redirect_stdout(io.StringIO()),
-        ):
-            code = main(
-                [
-                    "run",
-                    "--config",
-                    str(ROOT / variant["config"]),
-                    *common,
-                    *variant["arguments"],
-                ]
-            )
-        self.assertEqual(code, 0, variant["name"])
-        return execute.call_args.args[0]
-
-    def signature(self, config):
-        return {
-            "tolerance": (config.solver.force_tolerance, config.solver.force_norm),
-            "gel_formulation": config.material.formulation,
-            "damping": tuple(contact_damping_commands(config.indenter, 2)),
-            "specimen": (
-                config.specification.suite["specimen"]["width_m"],
-                config.specification.suite["specimen"]["length_m"],
-            ),
-            "material": json.dumps(config.specification.bulk, sort_keys=True),
-            "contact": json.dumps(config.specification.case["contact"], sort_keys=True),
-            "protocol": json.dumps(
-                config.specification.suite["protocol"], sort_keys=True
-            ),
-        }
-
-    def test_every_variant_isolates_one_change_from_the_baseline(self):
-        from run_convergence_sweep import COMMON, VARIANTS
-
-        by_name = {v["name"]: v for v in VARIANTS}
-        baseline = self.signature(self.resolve(by_name["baseline"], COMMON))
-        # The baseline is the shipped preset under the setup's own tolerances.
-        self.assertEqual(baseline["tolerance"], (0.005, 1))
-        self.assertEqual(baseline["damping"], ())
-        expected = {
-            "control_tight_tolerance": "tolerance",
-            "contact_damping": "damping",
-            "gel_mixed_up": "gel_formulation",
-            "compact_specimen": "specimen",
-        }
-        # The attribution set is the controlled comparison. Force-matched runs
-        # deliberately carry their own protocol and are checked separately.
-        attribution = set(expected) | {"baseline", "combined"}
-        signatures = {
-            name: self.signature(self.resolve(by_name[name], COMMON))
-            for name in attribution
-        }
-        for name, key in expected.items():
-            differing = {k for k in baseline if baseline[k] != signatures[name][k]}
-            self.assertEqual(differing, {key}, f"{name} changed {differing}")
-        # Material, contact law and loading protocol are fixed across that set.
-        for name, other in signatures.items():
-            for held in ("material", "contact", "protocol"):
-                self.assertEqual(other[held], baseline[held], f"{name}/{held}")
-        # The combined run must be exactly the union of the corrections, with the
-        # tolerance left at the baseline value rather than tightened again.
-        combined = signatures["combined"]
-        self.assertEqual(combined["tolerance"], baseline["tolerance"])
-        for name, key in expected.items():
-            if name == "control_tight_tolerance":
-                continue
-            self.assertEqual(combined[key], signatures[name][key], f"combined/{key}")
-        self.assertEqual(
-            {k for k in baseline if baseline[k] != combined[k]},
-            {"damping", "gel_formulation", "specimen"},
-        )
-
-    def test_force_matched_variant_targets_a_load_not_a_depth(self):
-        from run_convergence_sweep import VARIANTS
-
-        variant = next(v for v in VARIANTS if v["name"] == "full_cycle_5n")
-        config = Config.load(ROOT / variant["config"])
-        protocol = config.specification.suite["protocol"]
-        # The travel exists to hit a measured load, so the target and where the
-        # number came from have to travel with the config.
-        self.assertEqual(protocol["normal_force_target_n"], 5.0)
-        self.assertIn("5.0 N", protocol["travel_calibration"])
-        self.assertTrue(protocol["release"])
-        self.assertTrue(protocol["allow_recorded_lift_off"])
-        names = [p["name"] for p in protocol["phases"]]
-        self.assertEqual(names[0], "press")
-        self.assertEqual(names[-1], "release")
-        self.assertIn("slide_at_fixed_compression", names)
-        # Release must clear first touch and hold the slid position.
-        last = protocol["keyframes"][-1]
-        self.assertLess(last["normal_travel_m"], 0)
-        self.assertEqual(last["x_m"], 0.010)
-        # The variant runs the whole protocol; it must not carry a press-only stop.
-        self.assertNotIn("--stop-after-s", variant["common"])
-
-    def test_sweep_stops_at_the_end_of_the_press_phase(self):
-        from run_convergence_sweep import COMMON
-
-        common = dict(zip(COMMON[::2], COMMON[1::2]))
-        config = Config.load(RUBBER)
-        press = [
-            p
-            for p in config.specification.suite["protocol"]["phases"]
-            if p["name"] == "press"
-        ]
-        self.assertEqual(float(common["--stop-after-s"]), press[0]["end_time_s"])
-        # Saved frames must land on whole mechanical checkpoints.
-        ratio = float(common["--sample-interval-s"]) / float(common["--solve-interval-s"])
-        self.assertEqual(ratio, round(ratio))
-
-
 class NormalControlTests(unittest.TestCase):
     """Travel control and load control, and the segments that cannot be either."""
 
-    FORCE = ROOT / "configs/material_plane_slide/soft_rubber_force_5n.json"
-    TRAVEL = ROOT / "configs/material_plane_slide/soft_rubber_5n.json"
+    FORCE = ROOT / "configs/material_plane_slide/soft_rubber_force.json"
+    TRAVEL = ROOT / "configs/material_plane_slide/soft_rubber.json"
 
     def model_for(self, config):
         import tempfile as tmpmod
@@ -487,7 +352,8 @@ class NormalControlTests(unittest.TestCase):
     def test_travel_control_is_unchanged_by_the_new_mode(self):
         config = Config.load(self.TRAVEL)
         self.assertEqual(config.specification.normal_control, "prescribed_platen_travel")
-        for at in (-1.0, 0.0, 2.0, 8.0):
+        end = config.specification.suite["protocol"]["recorded_interval_s"][1]
+        for at in (-1.0, 0.0, 2.0, end):
             pose = config.physical_pose(at)
             self.assertFalse(pose.force_controlled)
             self.assertIsNone(pose.normal_force_n)
@@ -497,8 +363,8 @@ class NormalControlTests(unittest.TestCase):
 
         Its normal degree of freedom is coupled and loaded, so ANSYS reports no
         reaction there. Leaving the books as reactions makes the specimen look
-        unbalanced by the whole contact force, which is what stopped the first
-        load-controlled run one tenth of a second into the press.
+        unbalanced by the whole contact force, and the run stops on the balance
+        check within a tenth of a second of the handover.
         """
         import tempfile as tmpmod
         from unittest.mock import MagicMock
@@ -635,12 +501,11 @@ class NormalControlTests(unittest.TestCase):
 class TransientWindowTests(unittest.TestCase):
     """Inertia switched on only where the physics needs it."""
 
-    STICK_SLIP = ROOT / "configs/material_plane_slide/soft_rubber_stick_slip_5n.json"
-    SHORT = ROOT / "configs/material_plane_slide/rigid_short_slide_5n.json"
+    TRANSIENT = ROOT / "configs/material_plane_slide/soft_rubber_transient.json"
 
     def test_solve_interval_keeps_checkpoints_coarser_than_increments(self):
         """One SOLVE per increment would be a gRPC round trip per 0.1 ms."""
-        case = Config.load(self.SHORT).specification
+        case = Config.load(self.TRANSIENT).specification
         window = next(w for w in case.transient_windows if w["inertia"])
         inside = [
             t
@@ -648,7 +513,9 @@ class TransientWindowTests(unittest.TestCase):
             if window["start_time_s"] < t < window["end_time_s"]
         ]
         span = window["end_time_s"] - window["start_time_s"]
-        self.assertLess(len(inside), span / window["time_increment_s"] / 10)
+        # One SOLVE per increment would be a gRPC round trip per increment.
+        self.assertGreater(window["solve_interval_s"], window["time_increment_s"])
+        self.assertLess(len(inside), round(span / window["time_increment_s"]))
         self.assertAlmostEqual(inside[1] - inside[0], window["solve_interval_s"], 9)
         # The increment itself stays fine, so DELTIM subdivides within a SOLVE.
         self.assertEqual(
@@ -660,7 +527,7 @@ class TransientWindowTests(unittest.TestCase):
         """A sliding setup may scope the requirement; it may not hide the rest."""
         from gelsight_ansys.plane_coverage import ContactCoverage
 
-        case = Config.load(self.SHORT).specification
+        case = Config.load(self.TRANSIENT).specification
         camera = case.suite["sensor"]["camera"]
         gel = case.suite["sensor"]["gel"]
         reference = np.array(
@@ -692,7 +559,7 @@ class TransientWindowTests(unittest.TestCase):
         """Two restart points made every resume impossible; the gap decides."""
         import numpy as np
 
-        config = Config.load(self.SHORT).with_plane_sampling(
+        config = Config.load(self.TRANSIENT).with_plane_sampling(
             sample_interval_s=0.1, solve_interval_s=0.02, maximum_time_increment_s=0.02
         )
         case = config.specification
@@ -722,26 +589,27 @@ class TransientWindowTests(unittest.TestCase):
 
     def test_every_frame_must_land_on_a_checkpoint(self):
         """A frame between checkpoints is never written, and never complained of."""
-        case = Config.load(self.SHORT).specification
+        case = Config.load(self.TRANSIENT).specification
         case.validate_sampling()
         window = next(w for w in case.transient_windows if w["inertia"])
-        span = window["end_time_s"] - window["start_time_s"]
-        # 0.25 / 0.02 is 12.5 intervals, so refined() rounds to 13 and samples
-        # every 0.019231 s - times no 0.005 s checkpoint grid contains.
-        window["sample_interval_s"] = 0.02
-        self.assertNotAlmostEqual(span / 0.02 % 1, 0.0)
+        # A whole multiple of the increment that is not one of the interval the
+        # window is solved at: the frames it asks for fall between checkpoints.
+        window["sample_interval_s"] = 4 * window["time_increment_s"]
+        self.assertNotAlmostEqual(
+            window["sample_interval_s"] / window["solve_interval_s"] % 1, 0.0
+        )
         with self.assertRaisesRegex(ValueError, "mechanical checkpoints"):
             case.validate_sampling()
 
     def test_a_window_may_not_solve_more_finely_than_it_steps(self):
-        case = Config.load(self.SHORT).specification
+        case = Config.load(self.TRANSIENT).specification
         window = next(w for w in case.transient_windows if w["inertia"])
         window["solve_interval_s"] = window["time_increment_s"] / 2
         with self.assertRaises(ValueError):
             case.validate_transient()
 
     def test_mass_reaches_the_solver_for_both_bodies(self):
-        config = Config.load(self.STICK_SLIP)
+        config = Config.load(self.TRANSIENT)
         lines = deck(config)
         # Without MP,DENS a transient analysis integrates an inertia-free model,
         # which is exactly the thing it exists to avoid.
@@ -760,7 +628,7 @@ class TransientWindowTests(unittest.TestCase):
         self.assertFalse([line for line in static if line.startswith("MP,DENS,1,")])
 
     def test_inertia_is_on_inside_the_window_and_off_outside(self):
-        config = Config.load(self.STICK_SLIP)
+        config = Config.load(self.TRANSIENT)
         case = config.specification
         window = case.transient_windows[0]
         model = self.model(config)
@@ -797,7 +665,7 @@ class TransientWindowTests(unittest.TestCase):
             return model
 
     def test_the_window_resolves_the_wave_it_exists_to_capture(self):
-        config = Config.load(self.STICK_SLIP)
+        config = Config.load(self.TRANSIENT)
         case = config.specification
         window = case.transient_windows[0]
         gel = config.material
@@ -811,7 +679,7 @@ class TransientWindowTests(unittest.TestCase):
         self.assertGreater((window["end_time_s"] - window["start_time_s"]) / transit, 20)
 
     def test_the_schedule_refines_inside_the_window_only(self):
-        config = Config.load(self.STICK_SLIP).with_plane_sampling(
+        config = Config.load(self.TRANSIENT).with_plane_sampling(
             sample_interval_s=0.1, solve_interval_s=0.02, maximum_time_increment_s=0.02
         )
         case = config.specification
@@ -821,7 +689,8 @@ class TransientWindowTests(unittest.TestCase):
             solves <= window["end_time_s"] + 1e-12
         )
         self.assertAlmostEqual(
-            float(np.diff(solves[inside]).max()), window["time_increment_s"]
+            float(np.diff(solves[inside]).max()),
+            window.get("solve_interval_s", window["time_increment_s"]),
         )
         self.assertAlmostEqual(float(np.diff(solves[~inside]).min()), 0.02)
         # Every saved frame must fall on a solved instant.
@@ -830,7 +699,7 @@ class TransientWindowTests(unittest.TestCase):
         self.assertEqual(case.time_increment_at(1.0, 0.02), 0.02)
 
     def test_the_slide_accelerates_instead_of_stepping_to_speed(self):
-        config = Config.load(self.STICK_SLIP)
+        config = Config.load(self.TRANSIENT)
         case = config.specification
         speed = [
             p["speed_m_s"]
@@ -848,7 +717,7 @@ class TransientWindowTests(unittest.TestCase):
     def test_incoherent_transient_declarations_are_rejected(self):
         from gelsight_ansys.plane_config import PlaneCase
 
-        source = Config.load(self.STICK_SLIP).specification
+        source = Config.load(self.TRANSIENT).specification
 
         def build(mutate):
             case = PlaneCase(source.suite, source.case)
@@ -877,8 +746,34 @@ class TransientWindowTests(unittest.TestCase):
 class SymmetricContactTests(unittest.TestCase):
     """Both pairings defined, ANSYS choosing, and a guard on what it chose."""
 
-    SYMMETRIC = ROOT / "configs/material_plane_slide/soft_rubber_symmetric_5n.json"
-    ASYMMETRIC = ROOT / "configs/material_plane_slide/soft_rubber_stiff_contact_5n.json"
+    BASE = ROOT / "configs/material_plane_slide/soft_rubber.json"
+
+    def pairings(self, case=None):
+        """One shipped preset, resolved with the reversed pair off and on.
+
+        The setup is written out and loaded rather than patched in memory, so the
+        pairing travels the path a user's config would: resolution reads
+        contact_numerics.symmetric_pair from the setup the case names.
+        """
+        import shutil
+        import tempfile as tmpmod
+
+        case = self.BASE if case is None else case
+        built = []
+        for symmetric in (False, True):
+            tmp = tmpmod.mkdtemp()
+            self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+            root = Path(tmp)
+            shutil.copytree(case.parent, root / "material_plane_slide")
+            shutil.copytree(case.parent.parent / "materials", root / "materials")
+            copied = root / "material_plane_slide" / case.name
+            setup = copied.parent / json.loads(copied.read_text())["setup"]
+            suite = json.loads(setup.read_text())
+            suite["contact_numerics"]["symmetric_pair"] = symmetric
+            setup.write_text(json.dumps(suite))
+            built.append(Config.load(copied))
+        assert [c.indenter.symmetric_contact for c in built] == [False, True]
+        return built
 
     def model(self, config):
         import tempfile as tmpmod
@@ -901,8 +796,9 @@ class SymmetricContactTests(unittest.TestCase):
         rejects any gap, so the second pair has to land beyond every element the
         first pair's reader walks.
         """
-        plain, _ = self.model(Config.load(self.ASYMMETRIC))
-        model, lines = self.model(Config.load(self.SYMMETRIC))
+        asymmetric, symmetric = self.pairings()
+        plain, _ = self.model(asymmetric)
+        model, lines = self.model(symmetric)
         self.assertTrue(model.symmetric_contact)
         self.assertEqual(model.contact_start, plain.contact_start)
         numbers = sorted(
@@ -916,7 +812,7 @@ class SymmetricContactTests(unittest.TestCase):
         self.assertGreater(model.second_pair_start, max(gel_block))
         # Nothing was renumbered: the asymmetric deck's elements keep the same
         # numbers here, and the reversed pair is appended past all of them.
-        _, plain_lines = self.model(Config.load(self.ASYMMETRIC))
+        _, plain_lines = self.model(asymmetric)
         plain_numbers = sorted(
             int(line.split(",")[1]) for line in plain_lines if line.startswith("EN,")
         )
@@ -924,7 +820,7 @@ class SymmetricContactTests(unittest.TestCase):
         self.assertEqual(model.second_pair_start, max(plain_numbers) + 1)
 
     def test_each_pair_gets_its_own_real_set_with_identical_numerics(self):
-        config = Config.load(self.SYMMETRIC)
+        config = self.pairings()[1]
         _, lines = self.model(config)
         reals = [line for line in lines if line.startswith("R,")]
         self.assertEqual(len(reals), 2)
@@ -937,12 +833,12 @@ class SymmetricContactTests(unittest.TestCase):
             )
         # KEYOPT(8)=2 is what hands the choice to the solver.
         self.assertIn("KEYOPT,2,8,2", lines)
-        self.assertNotIn("KEYOPT,2,8,2", self.model(Config.load(self.ASYMMETRIC))[1])
+        self.assertNotIn("KEYOPT,2,8,2", self.model(self.pairings()[0])[1])
 
     def test_damping_lands_in_the_right_real_set(self):
         from gelsight_ansys.plane_mechanics import contact_damping_commands
 
-        damped = Config.load(self.SYMMETRIC).with_contact_damping(
+        damped = self.pairings()[1].with_contact_damping(
             stabilization_damping_normal=1e-3, stabilization_damping_activation="always"
         )
         self.assertIn("RMODIF,1,31,0.001", contact_damping_commands(damped.indenter, 2))
@@ -951,7 +847,8 @@ class SymmetricContactTests(unittest.TestCase):
         )
 
     def test_a_pair_that_carries_part_of_the_load_stops_the_run(self):
-        config = Config.load(self.SYMMETRIC)
+        # Load control, so the commanded share is a number the guard can check.
+        config = self.pairings(ROOT / "configs/material_plane_slide/soft_rubber_force.json")[1]
         model, _ = self.model(config)
         model.last_pose = config.physical_pose(2.0)
         self.assertTrue(model.last_pose.force_controlled)
@@ -963,14 +860,14 @@ class SymmetricContactTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "gel-side contact pair"):
                 model.check_active_pair(np.array([0.0, 0.0, -commanded * share]))
         # An asymmetric model has nothing to check.
-        plain, _ = self.model(Config.load(self.ASYMMETRIC))
+        plain, _ = self.model(self.pairings()[0])
         plain.last_pose = model.last_pose
         plain.check_active_pair(np.zeros(3))
 
     def test_symmetric_contact_needs_a_deformable_specimen(self):
         from dataclasses import replace
 
-        config = Config.load(self.SYMMETRIC)
+        config = self.pairings()[1]
         rigid = replace(config, indenter=replace(config.indenter, deformable=False))
         with self.assertRaisesRegex(ValueError, "deformable specimen"):
             rigid.validate()

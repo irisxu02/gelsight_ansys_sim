@@ -441,22 +441,21 @@ class AnsysPlane(AnsysSession):
         A resume continues from the last saved frame, so the restart point for
         that frame's load step has to still exist. Frames are written every
         sample interval while a restart point is written every load step, and a
-        load step is one solve checkpoint, so a run that fails N checkpoints past
-        a frame needs at least that many kept. Two was not enough to resume
-        anything: a slide window sampled every 0.05 s with 0.005 s checkpoints
-        puts ten load steps between frames, and a failure eight steps past the
-        last frame left only load steps 193 and 194 on disk when 186 was wanted.
+        load step is one solve checkpoint, so a refined window can put ten load
+        steps between two frames. A solve also runs on past its last frame before
+        it fails. Keeping a couple of restart points covers neither, and the
+        resume fails with no restart file matching the requested load step.
 
-        Two frames' worth, with a floor, covers the gap and a failure that walks
-        some way beyond it. Each file is tens of megabytes, so this is disk for
-        the ability to resume at all.
+        Two frames' worth with a floor covers the gap and a failure that walks
+        some way beyond it. Each file is tens of megabytes: this is disk spent on
+        being able to resume at all.
         """
         import numpy as np
 
         case = self.case
         frames, checkpoints = case.frame_times, case.solve_times
-        # The widest gap, not the average: a refined window is exactly where a
-        # slide fails and exactly where frames are furthest apart in checkpoints.
+        # The widest gap, not the average: a refined window is both where a slide
+        # is likely to fail and where frames are furthest apart in checkpoints.
         counts = np.diff(np.searchsorted(checkpoints, frames, side="left"))
         per_frame = int(counts.max()) if counts.size else 1
         return min(100, max(8, 2 * per_frame + 4))

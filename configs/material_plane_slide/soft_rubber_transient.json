@@ -1,9 +1,9 @@
 {
   "schema_version": 3,
   "config_kind": "contact_simulation",
-  "name": "plane_rigid_reference_5n",
+  "name": "plane_soft_rubber_transient_onset",
   "calibrated": false,
-  "setup": "suite_5n_rigid.json",
+  "setup": "suite_transient.json",
   "object": {
     "geometry": {
       "shape": "plane",
@@ -12,7 +12,7 @@
       "thickness_m": 0.003
     },
     "material": {
-      "case": "../materials/rigid.json"
+      "case": "../materials/soft_rubber.json"
     }
   },
   "surface": {
@@ -33,23 +33,29 @@
       "model": "none"
     }
   },
-  "status": "diagnostic_variant",
+  "status": "capability_example",
   "runnable_with_current_cli": true,
   "parameter_origin": "Illustrative synthetic values; not measured properties of a named commercial material.",
-  "material_label": "Rigid smooth reference at 5 N",
-  "required_capabilities": [],
+  "material_label": "Soft rubber, transient slide onset",
+  "required_capabilities": [
+    "deformable_flat_slab",
+    "hyperelastic_prony",
+    "mixed_up_gpu_compatibility_check"
+  ],
   "model_notes": [
-    "Load-controlled at 5 N; travel is an outcome, so no per-material travel calibration is needed.",
-    "Six runs against the deformable rubber lost the slide between 250 and 400 um with contact status chattering. This removes the deformable target entirely: a smooth rigid target is a single exact quad, so a sliding contact point never crosses an internal facet boundary."
+    "Load controlled, with the slide onset integrated as a transient.",
+    "Mass reaches the solver only through MP,DENS, from density_kg_m3 on the gel and on the specimen's material case. A transient window over a model without it integrates no inertia at all."
   ],
   "expected_observables": [
-    "normal_force_n",
-    "tangential_force_n",
+    "normal_force_vs_travel",
+    "force_relaxation_during_hold",
+    "specimen_deformation_m",
     "marker_displacement_m"
   ],
   "calibration_measurements": [
-    "normal_load_vs_travel",
-    "static_and_kinetic_friction_at_multiple_loads_and_speeds"
+    "uniaxial_and_shear_stress_strain",
+    "stress_relaxation",
+    "friction_against_sensor_surface"
   ],
   "entry_point": "gelsight-ansys run --config <case.json>"
 }

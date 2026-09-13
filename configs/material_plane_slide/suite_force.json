@@ -1,12 +1,12 @@
 {
   "config_kind": "material_plane_suite",
   "schema_version": 2,
-  "name": "material_plane_rigid_5n_tangential_pair_and_ramp",
-  "status": "implemented_experimental",
+  "name": "material_plane_force_control",
+  "status": "capability_example",
   "runnable_with_current_cli": true,
   "calibrated": false,
   "units": "SI",
-  "description": "An oversized finite plane compresses the whole nominal sensor footprint, then slides while compression is held. All recorded states must maintain macroscopic contact.",
+  "description": "The shared plane slide driven by normal load instead of platen travel: press, hold, slide, hold, release. Contact is closed by a short travel-driven preload, the platen is then handed over to a commanded force, and travel becomes a measurement.",
   "config_contract": {
     "version": "proposed_v1",
     "path_base": "directory_containing_suite_json",
@@ -148,7 +148,7 @@
       "start_time_s": -2,
       "end_time_s": 0,
       "start_normal_travel_m": 0,
-      "end_normal_travel_m": 3e-05,
+      "end_normal_travel_m": 0.0001,
       "x_m": 0,
       "y_m": 0,
       "twist_rad": 0,
@@ -159,7 +159,7 @@
     },
     "recorded_interval_s": [
       0,
-      6.0
+      8.0
     ],
     "pose_interpolation": "linear",
     "phases": [
@@ -177,40 +177,44 @@
         "name": "slide_at_fixed_compression",
         "start_time_s": 3,
         "end_time_s": 5,
-        "speed_m_s": 0.005277778,
-        "acceleration_m_s2": 0.025
+        "speed_m_s": 0.005
       },
       {
         "name": "hold_after_slide",
         "start_time_s": 5,
         "end_time_s": 6
+      },
+      {
+        "name": "release",
+        "start_time_s": 6.0,
+        "end_time_s": 8.0
       }
     ],
     "keyframes": [
       {
         "time_s": 0.0,
-        "normal_force_n": 2.5,
+        "normal_force_n": 1.0,
         "x_m": 0.0,
         "y_m": 0,
         "twist_rad": 0
       },
       {
         "time_s": 0.5,
-        "normal_force_n": 3.13,
+        "normal_force_n": 2.0,
         "x_m": 0.0,
         "y_m": 0,
         "twist_rad": 0
       },
       {
         "time_s": 1.0,
-        "normal_force_n": 3.75,
+        "normal_force_n": 3.0,
         "x_m": 0.0,
         "y_m": 0,
         "twist_rad": 0
       },
       {
         "time_s": 1.5,
-        "normal_force_n": 4.38,
+        "normal_force_n": 4.0,
         "x_m": 0.0,
         "y_m": 0,
         "twist_rad": 0
@@ -230,65 +234,23 @@
         "twist_rad": 0
       },
       {
-        "time_s": 3.01,
-        "normal_force_n": 5.0,
-        "x_m": 1.25e-06,
-        "y_m": 0,
-        "twist_rad": 0
-      },
-      {
-        "time_s": 3.02,
-        "normal_force_n": 5.0,
-        "x_m": 5e-06,
-        "y_m": 0,
-        "twist_rad": 0
-      },
-      {
-        "time_s": 3.05,
-        "normal_force_n": 5.0,
-        "x_m": 3.125e-05,
-        "y_m": 0,
-        "twist_rad": 0
-      },
-      {
-        "time_s": 3.1,
-        "normal_force_n": 5.0,
-        "x_m": 0.000125,
-        "y_m": 0,
-        "twist_rad": 0
-      },
-      {
-        "time_s": 3.15,
-        "normal_force_n": 5.0,
-        "x_m": 0.00028125,
-        "y_m": 0,
-        "twist_rad": 0
-      },
-      {
-        "time_s": 3.2,
-        "normal_force_n": 5.0,
-        "x_m": 0.0005,
-        "y_m": 0,
-        "twist_rad": 0
-      },
-      {
         "time_s": 3.5,
         "normal_force_n": 5.0,
-        "x_m": 0.002083333333,
+        "x_m": 0.0025,
         "y_m": 0,
         "twist_rad": 0
       },
       {
         "time_s": 4.0,
         "normal_force_n": 5.0,
-        "x_m": 0.004722222222,
+        "x_m": 0.005,
         "y_m": 0,
         "twist_rad": 0
       },
       {
         "time_s": 4.5,
         "normal_force_n": 5.0,
-        "x_m": 0.007361111111,
+        "x_m": 0.0075,
         "y_m": 0,
         "twist_rad": 0
       },
@@ -304,32 +266,36 @@
         "normal_force_n": 5.0,
         "x_m": 0.01,
         "y_m": 0,
-        "twist_rad": 0
+        "twist_rad": 0,
+        "release_travel_m": 0.00029
+      },
+      {
+        "time_s": 7.6,
+        "normal_force_n": 0.0,
+        "x_m": 0.01,
+        "y_m": 0,
+        "twist_rad": 0,
+        "release_travel_m": 0.0
+      },
+      {
+        "time_s": 8.0,
+        "normal_force_n": 0.0,
+        "x_m": 0.01,
+        "y_m": 0,
+        "twist_rad": 0,
+        "release_travel_m": -0.0001
       }
     ],
-    "release": false,
-    "allow_recorded_lift_off": false,
+    "release": true,
+    "allow_recorded_lift_off": true,
     "notes": [
-      "Rigid specimen: the gel alone carries the load, so a confined-layer estimate puts the stack near 66 N/mm against about 20 N/mm for the rubber.",
-      "Preload 0.03 mm, estimated near 2 N; the press then commands 2.5 N upward to 5 N so the handover moves the platen in the pressing direction whichever way the estimate errs.",
-      "Control, not a dataset. A rigid smooth target is one exact quad with no internal boundaries, so it removes the faceted sliding surface, the specimen's near incompressibility and the contact pairing question at once.",
-      "No release: it would need the travel it lifts from, which load control leaves as an outcome and nobody has measured for a rigid specimen.",
-      "The slide accelerates to 5.278 mm/s over 0.2 s instead of stepping to speed, and the onset is stepped ten times finer. The slide still covers its declared 10 mm."
+      "Equal travel is not equal load. A rigid specimen leaves the gel carrying everything while foam absorbs most of it, so a travel-driven protocol has to be refitted for every material it runs on. A load-driven one does not: the same file transfers to any specimen, and travel is reported instead.",
+      "The preload stays travel-driven because a load cannot close an open gap, and the release stays travel-driven because separation is a position, not a load. The schema enforces both.",
+      "The press ramps from 1 N so the handover from preload to load control is gradual whichever side of 1 N the preload landed on."
     ],
     "normal_force_target_n": 5.0,
     "travel_calibration": "Not needed: the press commands 5 N directly. The preload stays travel-driven because normal stiffness is zero before first touch, and the release is travel-driven because holding zero load cannot lift clear of the surface.",
-    "transient": {
-      "windows": [
-        {
-          "start_time_s": 3.0,
-          "end_time_s": 3.2,
-          "time_increment_s": 0.002,
-          "sample_interval_s": 0.1,
-          "inertia": false,
-          "reason": "Slide onset. The first increment has to be small against the slip allowance, or every contact point crosses it together."
-        }
-      ]
-    }
+    "release_start_time_s": 6.0
   },
   "contact_acceptance": {
     "scope": "all_recorded_frames_and_converged_substeps",
@@ -392,19 +358,12 @@
     "formulation": "augmented_lagrange",
     "sliding": "finite",
     "separation": "allowed",
-    "normal_stiffness_factor": 10,
-    "tangential_stiffness_factor": 10,
-    "penetration_tolerance_m": 1e-05,
-    "elastic_slip_tolerance_m": 2.5e-05,
+    "normal_stiffness_factor": 1,
+    "tangential_stiffness_factor": 1,
+    "penetration_tolerance_m": 1e-06,
+    "elastic_slip_tolerance_m": 2.5e-06,
     "update_stiffness_each_iteration": true,
-    "retain_history_during_slide": true,
-    "stabilization_damping": {
-      "normal_factor": 0.001,
-      "tangential_factor": 0.001,
-      "activation": "always"
-    },
-    "penetration_tolerance_note": "Penetration scales as 1/FKN: measured 26.4 um at FKN = 1, so FKN = 10 gives about 2.6 um, roughly 2% of the 150 um surface deformation the renderer depends on. The 10 um threshold then sits about four times above it, so augmentation rarely fires and the contact status stops chattering. A 1 um threshold with FKN = 1 forced augmentation every step: ANSYS's chattering level climbed 0 -> 12 over 370 um of slide, in four runs that otherwise differed in normal control, damping, inertia and friction law.",
-    "tangential_pair_note": "The first slide step converged and was then thrown off ten times, the residual jumping up to 326x each time before it gave up. Augmented Lagrange updates its multipliers on a converged state, so repeated jumps mean the threshold is tighter than the penalty can hold. The normal direction can no longer be the cause - FTOLN is 10 um against 0.69 um of penetration - which leaves the tangential pair, untouched at FKT = 1 and SLTO = 2.5 um. ANSYS defaults SLTO to about 1% of the contact length, near 7 um here."
+    "retain_history_during_slide": true
   },
   "solver": {
     "version": 252,

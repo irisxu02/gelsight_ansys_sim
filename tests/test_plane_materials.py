@@ -190,6 +190,22 @@ class PlaneMaterialTests(unittest.TestCase):
             self.assertGreater(slide, 0)
             self.assertEqual(other.pose(end)["x_m"], slide)
             self.assertTrue((path.parent / setup).is_file())
+        # The dataset presets share one schedule. A case that brings its own is
+        # a worked example of a control mode and says so, so nobody mistakes it
+        # for one of them.
+        self.assertEqual(
+            {
+                p.name
+                for p in sources
+                if sources[p].get("setup") not in (None, "suite.json")
+            },
+            {
+                p.name
+                for p in sources
+                if sources[p].get("status") == "capability_example"
+                and sources[p].get("config_kind") == "contact_simulation"
+            },
+        )
         dz = np.diff(depth_axis(0.004, 0.000125, 0.0005))
         np.testing.assert_allclose(dz[:4], 0.000125)
         self.assertLessEqual(max(dz[1:] / dz[:-1]), 1.3 + 1e-12)

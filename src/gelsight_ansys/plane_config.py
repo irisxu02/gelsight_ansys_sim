@@ -51,12 +51,25 @@ class PlaneCase:
     def bulk(self):
         return self.case["bulk_material"]
 
-    def refined(self, coarse, key):
-        """Add each transient window's own grid to a coarse schedule."""
+    def refined(self, coarse, key, fallback=True):
+        """Add each transient window's own grid to a coarse schedule.
+
+        The interval has to divide the span, which validate_transient enforces.
+        Otherwise `round` fits a whole number of intervals into the window and
+        grids it at a spacing nobody declared - a 0.25 s window asked for 0.02 s
+        becomes 13 intervals of 0.019231 s, which lands off any checkpoint grid.
+
+        Checkpoints fall back to the window's own increment, which is the finest
+        a window can be solved at and a sensible default. Frames do not: a window
+        that says nothing about sampling should add no frames, because falling
+        back to a 0.1 ms increment would ask for thousands of them.
+        """
         times = [coarse]
         for window in self.transient_windows:
+            step = window.get(key, window["time_increment_s"] if fallback else None)
+            if step is None:
+                continue
             a, b = window["start_time_s"], window["end_time_s"]
-            step = window.get(key, window["time_increment_s"])
             times.append(np.linspace(a, b, round((b - a) / step) + 1))
         return np.unique(np.round(np.concatenate(times), 12))
 
@@ -65,7 +78,7 @@ class PlaneCase:
         start, end = self.suite["protocol"]["recorded_interval_s"]
         step = self.suite["dataset"]["sample_interval_s"]
         grid = np.linspace(start, end, round((end - start) / step) + 1)
-        return self.refined(grid, "sample_interval_s")
+        return self.refined(grid, "sample_interval_s", fallback=False)
 
     @property
     def solve_times(self):
@@ -455,6 +468,31 @@ class PlaneCase:
                     "A transient window's sample interval must be a whole "
                     "multiple of its time increment"
                 )
+            checkpoint = window.get("solve_interval_s", dt)
+            if "sample_interval_s" in window:
+                # A frame is written from the state a checkpoint leaves behind,
+                # so sampling finer than the checkpoint grid, or off it, asks
+                # for frames that cannot exist. validate_sampling catches the
+                # consequence; this names the cause.
+                steps = sample / checkpoint
+                if not np.isclose(steps, round(steps), rtol=0, atol=1e-9) or steps < 1:
+                    raise ValueError(
+                        "A transient window's sample interval must be a whole "
+                        "multiple of the interval it is solved at"
+                    )
+            # Being a multiple of the increment is not enough: the increment
+            # divides the span but a multiple of it need not, and a grid that
+            # does not divide the span is built at a spacing nobody declared.
+            for name in ("sample_interval_s", "solve_interval_s"):
+                step = window.get(name)
+                if step is None:
+                    continue
+                steps = (b - a) / step
+                if not np.isclose(steps, round(steps), rtol=0, atol=1e-9):
+                    raise ValueError(
+                        f"A transient window's {name} must divide its span: "
+                        f"{b - a:.6g} s is not a whole number of {step:.6g} s steps"
+                    )
 
     def validate_relaxation(self):
         data = self.bulk.get("viscoelasticity")

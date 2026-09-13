@@ -72,16 +72,17 @@ class ContactCoverage:
 
         Pressing loads a free-edged gel almost uniformly, so demanding that every
         bin of the whole outer surface carry load is a fair statement that the
-        specimen is seated. Sliding does not work that way: the friction force
-        acts at the surface while the platen reaction acts above it, and the
-        couple tilts the pressure field across the footprint. The corners, which
-        the free edge already holds near zero, cross into separation. Measured on
-        the rigid 5 N reference at 125 um of slide, the twenty least loaded
-        elements were all outside the camera's field of view, where the minimum
-        was 1.57 kPa, while inside it the minimum was 7.39 kPa against a 16.8 kPa
-        peak. No threshold rescues the corners - the weakest bin decays smoothly
-        through six decades - so a setup that slides declares which region the
-        requirement speaks for. Both fractions are recorded either way.
+        specimen is seated. Sliding is not like that. The gel's free corners
+        already sit near zero pressure, and a slide takes them through it into
+        separation while the rest of the footprint stays well seated - not by
+        tilting the pressure field, which stays symmetric because the platen's
+        rotational constraint takes the moment, but locally at the rim, where the
+        slip ring also nucleates. Those corners lie outside the camera's field of
+        view, so they are in no frame the dataset holds, and no threshold rescues
+        them: the weakest bin decays smoothly through several decades.
+
+        A setup that slides therefore declares which region the requirement
+        speaks for. Both fractions are recorded either way.
         """
         rules = self.rules["macroscopic_contact_bins"]
         name = rules.get("region", "whole_sensor_surface")
