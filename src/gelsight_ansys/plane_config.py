@@ -134,12 +134,19 @@ class PlaneCase:
         """(start, end) of the load step that solves this instant.
 
         Steps run between consecutive mechanical checkpoints and are closed at
-        their end: a substep's time lies in (start, end].
+        their end: a substep's time lies in (start, end]. The preload is one
+        step of its own, from where initialization starts to the first
+        checkpoint, so an instant inside it is not attributed to the recording's
+        first step.
         """
         grid = self.solve_times
+        first = float(grid[0])
+        if physical_time <= first + 1e-12:
+            return self.suite["protocol"]["initialization"]["start_time_s"], first
         index = int(np.searchsorted(grid, physical_time - 1e-12))
-        index = min(max(index, 1), len(grid) - 1)
-        return float(grid[index - 1]), float(grid[index])
+        return float(grid[min(index, len(grid) - 1) - 1]), float(
+            grid[min(index, len(grid) - 1)]
+        )
 
     def step_window(self, physical_time):
         """The transient window governing the load step that solves this instant.

@@ -846,15 +846,77 @@ class TransientWindowTests(unittest.TestCase):
         case = config.specification
         model = self.model(config)
         grid = case.solve_times
-        for start, end in zip(grid[:-1], grid[1:]):
+        # The preload is one load step of its own, before the first checkpoint.
+        preload = case.suite["protocol"]["initialization"]["start_time_s"]
+        steps = [(preload, float(grid[0]))] + [
+            (float(a), float(b)) for a, b in zip(grid[:-1], grid[1:])
+        ]
+        seen = set()
+        for start, end in steps:
             step_is_transient = model.time_integration_commands(
-                config.physical_pose(float(end))
+                config.physical_pose(end)
             ) != ["TIMINT,OFF"]
+            seen.add(step_is_transient)
             # Substeps land anywhere in (start, end]; they were all solved with
             # whatever time integration the step was given.
             for fraction in (0.001, 0.5, 1.0):
-                at = float(start) + fraction * float(end - start)
+                at = start + fraction * (end - start)
                 self.assertEqual(case.integrates_mass(at), step_is_transient, at)
+                self.assertEqual(case.solved_step(at), (start, end), at)
+        # The protocol has to contain both regimes for this to prove anything.
+        self.assertEqual(seen, {True, False})
+
+    def test_the_step_reaching_a_window_keeps_the_coarse_increment(self):
+        """It is a static hold; inheriting the window's increment split it into
+        a hundred substeps of a solution that was not moving."""
+        config = Config.load(self.TRANSIENT)
+        case = config.specification
+        window = case.transient_windows[0]
+        base = case.suite["solver"]["maximum_time_increment_s"]
+        grid = case.solve_times
+        reaching = float(grid[grid <= window["start_time_s"] + 1e-12][-1])
+        self.assertEqual(reaching, window["start_time_s"])
+        self.assertEqual(case.time_increment_at(reaching, base), base)
+        first_inside = float(grid[grid > window["start_time_s"] + 1e-12][0])
+        self.assertEqual(
+            case.time_increment_at(first_inside, base), window["time_increment_s"]
+        )
+
+    def test_an_abutting_refinement_window_does_not_decide_the_inertial_one(self):
+        """The layout that hid this: a refine-only window ending where the
+        inertial window begins made the boundary step static for the right
+        reason by accident, because the first matching window won."""
+        from copy import deepcopy
+
+        from gelsight_ansys.plane_config import PlaneCase
+
+        source = Config.load(self.TRANSIENT).specification
+        suite = deepcopy(source.suite)
+        transient = suite["protocol"]["transient"]
+        inertial = transient["windows"][0]
+        start = inertial["start_time_s"]
+        transient["windows"] = [
+            {
+                "start_time_s": start - 0.05,
+                "end_time_s": start,
+                "time_increment_s": 0.002,
+                "solve_interval_s": 0.01,
+                "inertia": False,
+                "reason": "refine the step only",
+            },
+            inertial,
+        ]
+        case = PlaneCase(suite, deepcopy(source.case)).validate()
+        # Both windows claim the shared instant; the step decides, not the lookup.
+        self.assertIsNotNone(case.transient_at(start))
+        self.assertFalse(case.integrates_mass(start))
+        grid = case.solve_times
+        after = float(grid[grid > start + 1e-12][0])
+        self.assertTrue(case.integrates_mass(after))
+        # The refine-only window still refines, without integrating mass.
+        inside_refine = start - 0.005
+        self.assertEqual(case.time_increment_at(inside_refine, 0.01), 0.002)
+        self.assertFalse(case.integrates_mass(inside_refine))
         # The restart rebuilds from gel.rdb, so the state has to be restated.
         source = (ROOT / "src/gelsight_ansys/plane_mechanics.py").read_text()
         restore = source[
