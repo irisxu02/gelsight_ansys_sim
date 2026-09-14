@@ -814,11 +814,47 @@ class TransientWindowTests(unittest.TestCase):
                 model.time_integration_commands(config.physical_pose(at)),
                 ["TIMINT,OFF"],
             )
-        for at in (window["start_time_s"], middle, window["end_time_s"]):
-            self.assertIsNotNone(case.transient_at(at), at)
+        # Inertia is a load-step setting, so the step that ends where the window
+        # begins is still outside it and the step that begins where the window
+        # ends is too. The switch-on step used to be half in and half out: the
+        # solver integrated its mass and the checks then demanded the
+        # quasi-static balance of its substeps, reading the gel's inertial force
+        # as an error until it tripped the tolerance.
+        grid = case.solve_times
+        first = float(grid[grid > window["start_time_s"] + 1e-12][0])
+        last = window["end_time_s"]
+        after = float(grid[grid > last + 1e-12][0])
+        # The window's own start instant is inside the window and still solved
+        # statically, because the step that reaches it began outside.
+        self.assertIsNotNone(case.transient_at(window["start_time_s"]))
+        for at in (window["start_time_s"], after):
+            self.assertEqual(
+                model.time_integration_commands(config.physical_pose(at)),
+                ["TIMINT,OFF"],
+                at,
+            )
+            self.assertFalse(case.integrates_mass(at), at)
+        for at in (first, middle, last):
             commands = model.time_integration_commands(config.physical_pose(at))
-            self.assertEqual(commands[0], "TIMINT,ON")
+            self.assertEqual(commands[0], "TIMINT,ON", at)
             self.assertTrue(commands[1].startswith("TINTP,"))
+            self.assertTrue(case.integrates_mass(at), at)
+
+    def test_every_substep_of_a_step_is_judged_as_the_step_was_solved(self):
+        """The check has to judge what the solver did, not where the instant is."""
+        config = Config.load(self.TRANSIENT)
+        case = config.specification
+        model = self.model(config)
+        grid = case.solve_times
+        for start, end in zip(grid[:-1], grid[1:]):
+            step_is_transient = model.time_integration_commands(
+                config.physical_pose(float(end))
+            ) != ["TIMINT,OFF"]
+            # Substeps land anywhere in (start, end]; they were all solved with
+            # whatever time integration the step was given.
+            for fraction in (0.001, 0.5, 1.0):
+                at = float(start) + fraction * float(end - start)
+                self.assertEqual(case.integrates_mass(at), step_is_transient, at)
         # The restart rebuilds from gel.rdb, so the state has to be restated.
         source = (ROOT / "src/gelsight_ansys/plane_mechanics.py").read_text()
         restore = source[

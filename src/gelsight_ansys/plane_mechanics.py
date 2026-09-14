@@ -580,7 +580,7 @@ class AnsysPlane(AnsysSession):
         """
         if not self.case.inertia_windows:
             return []
-        window = None if pose is None else self.case.transient_at(pose.time_s)
+        window = None if pose is None else self.case.step_window(pose.time_s)
         if window is None or not window.get("inertia", True):
             return ["TIMINT,OFF"]
         decay = (

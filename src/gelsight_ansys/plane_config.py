@@ -130,8 +130,38 @@ class PlaneCase:
                 return window
         return None
 
+    def solved_step(self, physical_time):
+        """(start, end) of the load step that solves this instant.
+
+        Steps run between consecutive mechanical checkpoints and are closed at
+        their end: a substep's time lies in (start, end].
+        """
+        grid = self.solve_times
+        index = int(np.searchsorted(grid, physical_time - 1e-12))
+        index = min(max(index, 1), len(grid) - 1)
+        return float(grid[index - 1]), float(grid[index])
+
+    def step_window(self, physical_time):
+        """The transient window governing the load step that solves this instant.
+
+        Inertia and the time increment are load-step settings, so they are
+        decided once for the whole step. A step is inside a window when its
+        interior is: the step that ends exactly at a window's start is still
+        outside it, and the step that begins exactly at a window's end is too.
+        Judging by an endpoint instead put the switch-on step half in and half
+        out - integrated with mass by the solver, then held to the quasi-static
+        balance by the checks, which read the gel's inertial force as an error.
+        """
+        start, end = self.solved_step(physical_time)
+        return self.transient_at((start + end) / 2)
+
+    def integrates_mass(self, physical_time):
+        """Whether the load step that solves this instant carries the gel's mass."""
+        window = self.step_window(physical_time)
+        return window is not None and window.get("inertia", True)
+
     def time_increment_at(self, physical_time, default):
-        window = self.transient_at(physical_time)
+        window = self.step_window(physical_time)
         return window["time_increment_s"] if window else default
 
     @property

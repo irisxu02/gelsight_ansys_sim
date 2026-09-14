@@ -86,8 +86,7 @@ def inertia_integrated_at(config, time_s):
     case = getattr(config, "specification", None)
     if case is None:
         return False
-    window = case.transient_at(time_s)
-    return window is not None and window.get("inertia", True)
+    return case.integrates_mass(time_s)
 
 
 def validate_frame(metrics, config):

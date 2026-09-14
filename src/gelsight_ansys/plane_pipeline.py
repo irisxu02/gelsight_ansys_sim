@@ -267,8 +267,7 @@ def run_plane(
                     record["contact_required"] = case.requires_contact(state.time_s)
                     error = float(np.linalg.norm(force + state.backing_reaction_n))
                     record["force_balance_error_n"] = error
-                    window = case.transient_at(state.time_s)
-                    if window is not None and window.get("inertia", True):
+                    if case.integrates_mass(state.time_s):
                         # With mass integrated, contact minus backing is the
                         # gel's inertial force, not an error. It is recorded,
                         # and the quasi-static balance is demanded again on
