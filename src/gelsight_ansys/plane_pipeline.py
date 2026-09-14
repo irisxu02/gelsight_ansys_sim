@@ -208,6 +208,10 @@ def run_plane(
                 "specimen_hexes": len(model.object_mesh.hexes)
                 if model.object_mesh is not None
                 else 0,
+                # Where CONTA174's NMISC records start in gel.rst. It is read
+                # from MAPDL at build time and nowhere else, and an offline tool
+                # that reads contact results back from the result file needs it.
+                "contact_nonmisc_base": getattr(model, "nonmisc_base", None),
             }
             write_json(directory / "summary.json", summary)
             def record_substep(state, pose, gpu):
