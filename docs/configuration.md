@@ -151,6 +151,29 @@ mechanical checkpoints but save 121 frames over the six-second interval.
 Every converged internal state still receives the mechanical acceptance checks.
 See [sampling CLI options](usage.md#mechanical-steps-and-saved-frames).
 
+## Contact numerics
+
+Every key under the setup's `contact_numerics` is read by the solver adapter,
+and the setup is rejected if it declares one that is not; documentation goes in
+keys ending in `_note`. What each becomes in ANSYS:
+
+| Key | CONTA174 setting |
+|---|---|
+| `formulation` | `KEYOPT(2)`: `augmented_lagrange` (0) or `penalty` (1) |
+| `sliding` | Must be `finite`; the elements are defined for finite sliding |
+| `separation` | `KEYOPT(12)`: `allowed` (0) or `no_separation` (2) |
+| `normal_stiffness_factor` | `FKN` |
+| `penetration_tolerance_m` | `FTOLN`, absolute |
+| `tangential_stiffness_factor` | `FKT` |
+| `elastic_slip_tolerance_m` | `SLTO`, absolute |
+| `pinball_radius_m` | `PINB`, absolute |
+| `update_stiffness_each_iteration` | `KEYOPT(10)`: 2 when true, 0 when false |
+| `stabilization_damping` | `FDMN`, `FDMT` and `KEYOPT(15)`; see [Convergence](convergence.md) |
+| `symmetric_pair` | A second, reversed pair with `KEYOPT(8) = 2` |
+
+The same rule applies to `solver`: its keys are the `Solver` fields plus
+`maximum_time_increment_s`, which shapes the schedule, plus a free-text `note`.
+
 ## Control modes
 
 The shipped presets share `suite.json`, which commands a normal *load* of 5 N,

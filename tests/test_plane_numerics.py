@@ -126,6 +126,58 @@ class PlaneNumericsTests(unittest.TestCase):
         self.assertIn("NLDIAG,NRRE,ON", on)
         self.assertIn("NLDIAG,CONT,ITER", on)
 
+    def test_every_contact_setting_in_the_setup_reaches_the_deck(self):
+        """A key nothing reads is not a parameter; these are all read."""
+        config = Config.load(RUBBER)
+        rules = config.specification.suite["contact_numerics"]
+        lines = deck(config)
+        real = next(line for line in lines if line.startswith("R,1,"))
+        # R,<set>,R1,R2,FKN,FTOLN,R5,PINB
+        fields = real.split(",")
+        self.assertEqual(float(fields[4]), rules["normal_stiffness_factor"])
+        self.assertEqual(-float(fields[5]), rules["penetration_tolerance_m"])
+        self.assertEqual(-float(fields[7]), rules["pinball_radius_m"])
+        self.assertIn("KEYOPT,2,2,0", lines)  # augmented Lagrange
+        self.assertIn("KEYOPT,2,10,2", lines)  # stiffness updated each iteration
+        self.assertIn("KEYOPT,2,12,0", lines)  # separation allowed
+        penalty = config.with_contact_damping(
+            contact_formulation="penalty",
+            contact_separation="no_separation",
+            update_stiffness_each_iteration=False,
+            pinball_radius_m=0.002,
+        )
+        lines = deck(penalty)
+        self.assertIn("KEYOPT,2,2,1", lines)
+        self.assertIn("KEYOPT,2,10,0", lines)
+        self.assertIn("KEYOPT,2,12,2", lines)
+        self.assertTrue(any(line.startswith("R,1,") and line.endswith(",-0.002") for line in lines))
+        with self.assertRaisesRegex(ValueError, "contact_formulation"):
+            config.with_contact_damping(contact_formulation="lagrange")
+
+    def test_a_setup_may_only_declare_settings_that_are_read(self):
+        from copy import deepcopy
+
+        from gelsight_ansys.plane_config import PlaneCase
+
+        source = Config.load(RUBBER).specification
+
+        def build(mutate):
+            case = PlaneCase(deepcopy(source.suite), deepcopy(source.case))
+            mutate(case.suite)
+            return case
+
+        build(lambda s: None).validate()
+        with self.assertRaisesRegex(ValueError, "nothing reads: retain_history"):
+            build(lambda s: s["contact_numerics"].update(retain_history=True)).validate()
+        with self.assertRaisesRegex(ValueError, "must declare pinball_radius_m"):
+            build(lambda s: s["contact_numerics"].pop("pinball_radius_m")).validate()
+        with self.assertRaisesRegex(ValueError, "finite sliding"):
+            build(lambda s: s["contact_numerics"].update(sliding="small")).validate()
+        with self.assertRaisesRegex(ValueError, "solver declares settings nothing reads: inertia"):
+            build(lambda s: s["solver"].update(inertia=False)).validate()
+        # Documentation is welcome; it just has to say that it is documentation.
+        build(lambda s: s["contact_numerics"].update(pinball_note="why 4 mm")).validate()
+
     def test_stabilization_damping_uses_the_damping_slots_not_the_squeal_pair(self):
         config = Config.load(RUBBER)
         # The setup declares damping, and it reaches the solver as declared.

@@ -6,7 +6,7 @@
   "runnable_with_current_cli": true,
   "calibrated": false,
   "units": "SI",
-  "description": "An oversized finite plane compresses the whole nominal sensor footprint, then slides while compression is held. All recorded states must maintain macroscopic contact.",
+  "description": "An oversized finite plane is pressed onto the whole nominal sensor footprint under a commanded 5 N load, held, slid 10 mm at 5 mm/s with the load maintained, and held again. The slide is integrated with mass. All recorded states must keep macroscopic contact over the imaged region.",
   "config_contract": {
     "version": "proposed_v1",
     "path_base": "directory_containing_suite_json",
@@ -399,16 +399,18 @@
     "sliding": "finite",
     "separation": "allowed",
     "normal_stiffness_factor": 10,
-    "tangential_stiffness_factor": 30,
     "penetration_tolerance_m": 1e-05,
+    "tangential_stiffness_factor": 30,
     "elastic_slip_tolerance_m": 7.5e-05,
+    "pinball_radius_m": 0.004,
     "update_stiffness_each_iteration": true,
-    "retain_history_during_slide": true,
     "stabilization_damping": {
       "normal_factor": 0.001,
       "tangential_factor": 0.001,
       "activation": "always"
     },
+    "symmetric_pair": false,
+    "pinball_note": "Absolute pinball radius. Points farther than this from the target are not searched; 4 mm is well beyond any gap the protocol opens and far below the footprint, so it neither misses contact nor slows the search.",
     "penetration_note": "Penetration scales as 1/FKN. At FKN = 1 it was measured at 26.4 um, a sixth of the 150 um of surface deformation the renderer reads, and a penetration tolerance of 1 um below that forces augmentation on nearly every substep: contact status then chatters, and the chattering climbs with sliding distance until the solve stops. FKN = 10 brings penetration to 0.69 um and a 10 um tolerance sits well above it, so augmentation rarely fires. The accuracy and the convergence improve together; this is not a trade.",
     "tangential_pair_note": "FKT and SLTO are raised together, so the elastic slip the interface tolerates - their ratio - is unchanged at 2.5 um and the contact is exactly as stiff. What changes is how often augmented Lagrange revisits a converged state to update its multipliers. At FKT = 1 each revisit threw the residual up by as much as two orders of magnitude, and the slide was lost within tens of micrometres."
   },
@@ -426,12 +428,12 @@
     "force_tolerance": 0.005,
     "balance_tolerance": 0.02,
     "force_norm": 1,
-    "analysis": "time_dependent_quasi_static",
-    "large_deflection": true,
-    "inertia": false,
     "maximum_time_increment_s": 0.01,
-    "gpu_verification": "activation_and_positive_accelerated_work",
-    "unsupported_gpu_formulation_policy": "stop_and_report; do_not_silently_change_material_or_formulation"
+    "equation_solver": "sparse",
+    "nonlinear_diagnostics": false,
+    "transient_points_per_cycle": null,
+    "predict_cutback": true,
+    "note": "Large deflection (NLGEOM) is always on. The analysis is quasi-static except inside protocol.transient windows, which integrate mass. GPU acceleration is requested and verified by the run; a formulation the GPU cannot solve stops the run rather than silently changing the model. transient_points_per_cycle and predict_cutback are CUTCONTROL settings; null and true leave ANSYS's own."
   },
   "dataset": {
     "sample_interval_s": 0.01,
@@ -460,7 +462,7 @@
       "This sequence has no release, so recovery after separation and adhesive pull-off are not observed.",
       "A single x slide cannot identify all anisotropic parameters or all rate dependence.",
       "The fluffy case represents an effective layer; it does not resolve individual fibers.",
-      "No vibration channels are claimed by this quasi-static protocol.",
+      "The slide is integrated with mass, but no vibration channel is calibrated or claimed.",
       "Platen travel is an outcome here, so a case's indentation depth is a result to read, not a parameter to compare against another run's."
     ]
   },

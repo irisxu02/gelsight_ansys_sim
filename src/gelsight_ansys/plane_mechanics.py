@@ -77,16 +77,7 @@ class AnsysPlane(AnsysSession):
             f"EN,{i + 1}," + ",".join(str(int(n) + 1) for n in e)
             for i, e in enumerate(mesh.hexes)
         ]
-        cmds += [
-            "ET,2,CONTA174",
-            "KEYOPT,2,2,0",
-            "KEYOPT,2,4,0",
-            "KEYOPT,2,10,2",
-            "KEYOPT,2,11,0",
-            "KEYOPT,2,12,0",
-            "KEYOPT,2,18,0",
-            "ET,3,TARGE170",
-        ]
+        cmds += ["ET,2,CONTA174", *contact_keyopt_commands(c.indenter, 2), "ET,3,TARGE170"]
         if self.symmetric_contact:
             # ANSYS picks which way round the pair runs at solve time; both
             # definitions have to exist for it to have the choice.
@@ -712,11 +703,34 @@ def clearance(config):
     return config.indenter.clearance_m
 
 
+def contact_keyopt_commands(indenter, element_type):
+    """CONTA174 key options from the declared contact settings.
+
+    KEYOPT(4) detection at Gauss points, (11) shell thickness off and (18)
+    sliding behaviour are held at their defaults; the three that a setup can
+    reasonably need to change are read from it.
+    """
+    from .config import CONTACT_FORMULATIONS, CONTACT_SEPARATION
+
+    return [
+        f"KEYOPT,{element_type},2,{CONTACT_FORMULATIONS[indenter.contact_formulation]}",
+        f"KEYOPT,{element_type},4,0",
+        f"KEYOPT,{element_type},10,{2 if indenter.update_stiffness_each_iteration else 0}",
+        f"KEYOPT,{element_type},11,0",
+        f"KEYOPT,{element_type},12,{CONTACT_SEPARATION[indenter.contact_separation]}",
+        f"KEYOPT,{element_type},18,0",
+    ]
+
+
 def contact_real_commands(indenter, number):
-    """One real constant set per contact pair; a symmetric definition needs two."""
+    """One real constant set per contact pair; a symmetric definition needs two.
+
+    FKN, FTOLN and PINB (negative: absolute) go in the R command; the tangential
+    pair follows as RMODIF because its slots lie past the first six.
+    """
     return [
         f"R,{number},0,0,{indenter.stiffness_factor:.16g},"
-        f"{-indenter.penetration_tolerance_m:.16g},0,-0.004",
+        f"{-indenter.penetration_tolerance_m:.16g},0,{-indenter.pinball_radius_m:.16g}",
         f"RMODIF,{number},12,{indenter.tangential_stiffness_factor:.16g}",
         f"RMODIF,{number},23,{-indenter.elastic_slip_tolerance_m:.16g}",
     ]

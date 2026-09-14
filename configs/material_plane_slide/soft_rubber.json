@@ -44,7 +44,7 @@
   ],
   "model_notes": [
     "Near-incompressible rubber approximation; all relaxation parameters need fitting.",
-    "Normal travel is total specimen-plus-gel compression, not gel indentation alone."
+    "Platen travel, an outcome under load control, is total specimen-plus-gel compression, not gel indentation alone."
   ],
   "expected_observables": [
     "normal_force_vs_travel",

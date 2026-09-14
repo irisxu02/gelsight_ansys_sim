@@ -4,6 +4,7 @@ The common geometry/material config resolver supplies this mechanical adapter.
 Resolved records retain the physical-time suite and fully expanded material case.
 """
 
+import dataclasses
 import math
 from copy import deepcopy
 from dataclasses import dataclass
@@ -323,6 +324,7 @@ class PlaneCase:
             raise ValueError("Lift-off is only supported in an explicit release phase")
         self.validate_transient()
         self.validate_sampling()
+        self.validate_declared_keys()
         self.validate_relaxation()
         surface = case["surface_geometry"]
         if surface["model"] not in (
@@ -390,6 +392,54 @@ class PlaneCase:
             raise ValueError("Release must finish above first touch")
         if any(b > a for a, b in zip(travels, travels[1:])):
             raise ValueError("Release travel must decrease monotonically")
+
+    CONTACT_NUMERICS_KEYS = {
+        "formulation",
+        "sliding",
+        "separation",
+        "normal_stiffness_factor",
+        "tangential_stiffness_factor",
+        "penetration_tolerance_m",
+        "elastic_slip_tolerance_m",
+        "pinball_radius_m",
+        "update_stiffness_each_iteration",
+        "stabilization_damping",
+        "symmetric_pair",
+    }
+
+    SUITE_SOLVER_KEYS = {'maximum_time_increment_s'}
+
+    def validate_declared_keys(self):
+        """Every declared numeric setting must be one the solver actually reads.
+
+        A key that nothing reads looks like a parameter and is not one; the
+        contact pinball sat hard-coded in the deck for as long as three such
+        keys sat in the setup. Documentation goes in keys ending in _note.
+        """
+        from .config import Solver
+
+        numerics = self.suite["contact_numerics"]
+        unknown = {
+            k for k in numerics if k not in self.CONTACT_NUMERICS_KEYS and not k.endswith("_note")
+        }
+        if unknown:
+            raise ValueError(
+                "contact_numerics declares settings nothing reads: " + ", ".join(sorted(unknown))
+            )
+        missing = {"formulation", "sliding", "separation", "pinball_radius_m",
+                   "update_stiffness_each_iteration"} - set(numerics)
+        if missing:
+            raise ValueError("contact_numerics must declare " + ", ".join(sorted(missing)))
+        if numerics["sliding"] != "finite":
+            raise ValueError("Only finite sliding is implemented for the plane contact")
+        # Solver fields plus the settings the plane driver reads straight off
+        # the setup because they shape the schedule rather than the solver.
+        fields = {f.name for f in dataclasses.fields(Solver)} | self.SUITE_SOLVER_KEYS
+        unknown = {k for k in self.suite["solver"] if k not in fields and k != "note"}
+        if unknown:
+            raise ValueError(
+                "solver declares settings nothing reads: " + ", ".join(sorted(unknown))
+            )
 
     def validate_sampling(self):
         """Every recorded frame must fall on a mechanical checkpoint.

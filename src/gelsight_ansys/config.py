@@ -16,6 +16,10 @@ def positive(value, name):
 
 # CONTA174 KEYOPT(15). "always" keeps damping on near-field points even after they
 # have been closed, which is the case for a contact edge that peels open.
+# CONTA174 KEYOPT(2): how the contact constraint is enforced.
+CONTACT_FORMULATIONS = {"augmented_lagrange": 0, "penalty": 1}
+# CONTA174 KEYOPT(12): whether a closed point may open again.
+CONTACT_SEPARATION = {"allowed": 0, "no_separation": 2}
 DAMPING_ACTIVATION = {"first_load_step": 0, "all_load_steps": 2, "always": 3}
 
 
@@ -90,6 +94,12 @@ class Indenter:
     # criteria. Only meaningful against a deformable specimen: a rigid target has
     # no body to carry contact elements.
     symmetric_contact: bool = False
+    # CONTA174 settings that used to be fixed in the deck. Each is a real
+    # parameter of the contact, so each is declared where the others are.
+    pinball_radius_m: float = 0.004
+    contact_formulation: str = "augmented_lagrange"
+    contact_separation: str = "allowed"
+    update_stiffness_each_iteration: bool = True
     deformable: bool = False
     material: Material = field(
         default_factory=lambda: Material(young_pa=50000.0, poisson=0.45)
@@ -489,6 +499,15 @@ class Config:
                 )
         if self.indenter.symmetric_contact and not self.indenter.deformable:
             raise ValueError("Symmetric contact requires a deformable specimen")
+        positive(self.indenter.pinball_radius_m, "indenter.pinball_radius_m")
+        if self.indenter.contact_formulation not in CONTACT_FORMULATIONS:
+            raise ValueError(
+                "contact_formulation must be one of " + ", ".join(CONTACT_FORMULATIONS)
+            )
+        if self.indenter.contact_separation not in CONTACT_SEPARATION:
+            raise ValueError(
+                "contact_separation must be one of " + ", ".join(CONTACT_SEPARATION)
+            )
         if self.indenter.stabilization_damping_activation not in DAMPING_ACTIVATION:
             raise ValueError(
                 "stabilization_damping_activation must be one of "
