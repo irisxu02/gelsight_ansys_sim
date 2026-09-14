@@ -10,9 +10,25 @@ from PIL import Image
 
 
 def write_json(path, data):
-    Path(path).write_text(
-        json.dumps(data, indent=2, allow_nan=False) + "\n", encoding="utf-8"
-    )
+    """Write a record, tolerating a reader that has it open.
+
+    A run's summary is written after every frame and read while the run is
+    going. Windows denies a write to a file another process holds open, so a
+    glance at a summary must not end an eight-hour solve; the write is retried
+    for a few seconds before it is allowed to fail.
+    """
+    import time
+
+    text = json.dumps(data, indent=2, allow_nan=False) + "\n"
+    deadline = time.monotonic() + 10
+    while True:
+        try:
+            Path(path).write_text(text, encoding="utf-8")
+            return
+        except PermissionError:
+            if time.monotonic() > deadline:
+                raise
+            time.sleep(0.2)
 
 
 def save_frame(

@@ -345,3 +345,80 @@ class QueueResumeTests(unittest.TestCase):
             ):
                 self.assertIsNone(resumable(runs, config, progress=lambda _: None))
             self.assertIsNone(resumable(root / "runs" / "absent", config))
+
+
+class PublishingSurvivesReadersTests(unittest.TestCase):
+    """A status file exists to be read while the queue runs."""
+
+    def test_a_reader_holding_the_file_does_not_fail_the_write(self):
+        from gelsight_ansys.batch.render_queue import atomic_json
+
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "queue-status.json"
+            atomic_json(path, {"status": "running"})
+            attempts = []
+            original = Path.replace
+
+            def denied_once(self, target):
+                attempts.append(target)
+                if len(attempts) == 1:
+                    raise PermissionError(5, "Access is denied")
+                return original(self, target)
+
+            with patch.object(Path, "replace", denied_once):
+                atomic_json(path, {"status": "passed"})
+            self.assertEqual(len(attempts), 2)
+            self.assertEqual(json.loads(path.read_text())["status"], "passed")
+
+    def test_a_reader_that_never_lets_go_still_reports_the_failure(self):
+        from gelsight_ansys.batch.render_queue import atomic_json
+
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "queue-status.json"
+            with (
+                patch.object(
+                    Path, "replace", side_effect=PermissionError(5, "Access is denied")
+                ),
+                patch(
+                    "gelsight_ansys.batch.render_queue.time.monotonic",
+                    side_effect=[0, 1, 100],
+                ),
+                self.assertRaises(PermissionError),
+            ):
+                atomic_json(path, {"status": "running"})
+
+    def test_a_run_summary_is_written_through_a_reader_too(self):
+        from gelsight_ansys.artifacts import write_json
+
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "summary.json"
+            attempts = []
+            original = Path.write_text
+
+            def denied_once(self, text, **kwargs):
+                attempts.append(text)
+                if len(attempts) == 1:
+                    raise PermissionError(5, "Access is denied")
+                return original(self, text, **kwargs)
+
+            with patch.object(Path, "write_text", denied_once):
+                write_json(path, {"frames": 250})
+            self.assertEqual(json.loads(path.read_text())["frames"], 250)
+
+
+class OrphanedSolverTests(unittest.TestCase):
+    def test_a_failed_supervision_stops_the_job_it_was_watching(self):
+        from gelsight_ansys.batch.render_queue import stop_owned
+
+        child = SimpleNamespace(pid=4242)
+        owned, descendant = Mock(), Mock()
+        owned.children.return_value = [descendant]
+        fake = SimpleNamespace(
+            Process=lambda pid: owned,
+            NoSuchProcess=ProcessLookupError,
+            wait_procs=lambda processes, timeout: (processes, []),
+        )
+        with patch.dict(sys.modules, {"psutil": fake}):
+            stop_owned(child)
+        owned.kill.assert_called_once()
+        descendant.kill.assert_called_once()

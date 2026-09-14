@@ -32,10 +32,28 @@ def now():
 
 
 def atomic_json(path, data):
+    """Publish a status file whole, and survive anyone reading it.
+
+    Windows refuses to replace a file another process has open, so a status
+    file is exactly the kind of thing that breaks this: it exists to be read
+    while the queue runs. A glance from a terminal, an editor, or a progress
+    watcher used to raise PermissionError out of the heartbeat and fail the
+    job it was reporting on - once at 250 frames of a slide. The replace is
+    retried for a few seconds, which outlasts any reader that is not holding
+    the file open on purpose.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-    temporary.replace(path)
+    deadline = time.monotonic() + 10
+    while True:
+        try:
+            temporary.replace(path)
+            return
+        except PermissionError:
+            if time.monotonic() > deadline:
+                raise
+            time.sleep(0.2)
 
 
 def discover(configs, scale):
@@ -196,6 +214,23 @@ def earlier_runs(work, resume_from, name):
     return [root for root in roots if root.is_dir() and any(root.glob(f"{name}_*"))]
 
 
+def stop_owned(child):
+    """Stop a validation client and the solver it launched."""
+    import psutil
+
+    try:
+        owned = psutil.Process(child.pid)
+    except psutil.NoSuchProcess:
+        return
+    processes = [owned, *owned.children(recursive=True)]
+    for process in processes:
+        try:
+            process.kill()
+        except psutil.NoSuchProcess:
+            continue
+    psutil.wait_procs(processes, timeout=30)
+
+
 def run_validation(
     work, job, scale, executable, heartbeat, libraries=None, resume_from=None
 ):
@@ -287,10 +322,18 @@ def run_validation(
                 "create_time": psutil.Process(child.pid).create_time(),
             },
         )
-        while child.poll() is None:
-            watchdog.check(child)
-            heartbeat()
-            time.sleep(10)
+        try:
+            while child.poll() is None:
+                watchdog.check(child)
+                heartbeat()
+                time.sleep(10)
+        except BaseException:
+            # Whatever ends the supervision - a watchdog, a failed status
+            # write, an interrupt - the job it was supervising must not be left
+            # solving. An orphan holds the single licence and competes with the
+            # preset the queue moves on to.
+            stop_owned(child)
+            raise
         if child.returncode:
             raise RuntimeError(f"Validation process exited with code {child.returncode}")
     return validation
