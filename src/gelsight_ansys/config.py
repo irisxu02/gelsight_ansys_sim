@@ -142,11 +142,12 @@ class Solver:
     # solver text does not (it reports "Element 0").
     nonlinear_diagnostics: bool = False
     # Points per response cycle that automatic time stepping aims for once
-    # inertia is integrated (CUTCONTROL,NPOINT; ANSYS defaults to 5 for a
-    # nonlinear solve). A contact status change raises the response frequency
-    # the estimate is built on, so the default collapses the increment far below
-    # the declared maximum even while every substep converges in two iterations.
-    # None leaves ANSYS's own default in place.
+    # inertia is integrated (CUTCONTROL,NPOINT). None sends no command and
+    # leaves ANSYS's own choice; the shipped plane suite declares 13, measured
+    # at the inertia window's onset against sending nothing. The increment this
+    # produces is not the whole story either way: as sliding develops it decays
+    # to a few 1e-5 s under either setting, which is the interface changing
+    # state, not the control.
     transient_points_per_cycle: int | None = None
     # Cut back on a predicted iteration count (CUTCONTROL,NOITERPREDICT) rather
     # than on an actual failure to converge. ANSYS predicts by default.

@@ -413,9 +413,9 @@
     "maximum_time_increment_s": 0.01,
     "equation_solver": "sparse",
     "nonlinear_diagnostics": false,
-    "transient_points_per_cycle": null,
+    "transient_points_per_cycle": 13,
     "predict_cutback": true,
-    "note": "Large deflection (NLGEOM) is always on. The analysis is quasi-static except inside protocol.transient windows, which integrate mass. GPU acceleration is requested and verified by the run; a formulation the GPU cannot solve stops the run rather than silently changing the model. transient_points_per_cycle and predict_cutback are CUTCONTROL settings; null and true leave ANSYS's own. The 150-iteration ceiling leaves headroom for contact status changes; it used to be imposed silently on top of a declared 80, so a resolved run disagreed with the setup it came from. cores, gpu, require_gpu and allow_unlisted_gpu say where a run executes and are the only solver settings a resolved run may hold differently from this block."
+    "note": "Large deflection (NLGEOM) is always on. The analysis is quasi-static except inside protocol.transient windows, which integrate mass. GPU acceleration is requested and verified by the run; a formulation the GPU cannot solve stops the run rather than silently changing the model. transient_points_per_cycle and predict_cutback are CUTCONTROL settings. 13 points per response cycle is measured, not assumed: at the inertia window's onset the rigid reference held a 8.5e-5 s increment and converged every substep in one iteration with it, and without it ANSYS predicted a larger increment, failed to converge, bisected to 2.3e-5 s and spent four iterations a substep. Leaving the key null sends no command and takes whatever ANSYS would choose. The 150-iteration ceiling leaves headroom for contact status changes; it used to be imposed silently on top of a declared 80, so a resolved run disagreed with the setup it came from. cores, gpu, require_gpu and allow_unlisted_gpu say where a run executes and are the only solver settings a resolved run may hold differently from this block."
   },
   "dataset": {
     "sample_interval_s": 0.01,
