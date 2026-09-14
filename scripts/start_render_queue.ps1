@@ -8,6 +8,7 @@ param(
     [string]$Examples,
     [string]$Libraries,
     [string]$ReusePassed,
+    [string]$ResumeFrom,
     [string[]]$Skip = @(),
     [ValidateRange(1, 8)][int]$RenderScale = 4
 )
@@ -41,7 +42,7 @@ Get-ChildItem $snapshot -Recurse -File | Where-Object { $_.FullName -notmatch '_
     $hashes[$relative] = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLower()
 }
 $hashes | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $Work 'snapshot-manifest.json') -Encoding UTF8
-$settings = @{ python=$Python; work=$Work; examples=$Examples; scale=$RenderScale; snapshot=$snapshot; libraries=$(if ($Libraries) { Join-Path $snapshot "native" } else { $null }); reuse_passed=$(if ($ReusePassed) { (Resolve-Path $ReusePassed).Path } else { $null }); skip=@($Skip) }
+$settings = @{ python=$Python; work=$Work; examples=$Examples; scale=$RenderScale; snapshot=$snapshot; libraries=$(if ($Libraries) { Join-Path $snapshot "native" } else { $null }); reuse_passed=$(if ($ReusePassed) { (Resolve-Path $ReusePassed).Path } else { $null }); resume_from=$(if ($ResumeFrom) { (Resolve-Path $ResumeFrom).Path } else { $null }); skip=@($Skip) }
 $settings | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Work 'launcher.json') -Encoding UTF8
 $bootstrap = @'
 import json
@@ -59,6 +60,8 @@ if settings.get('libraries'):
     command.extend(['--libraries', settings['libraries']])
 if settings.get('reuse_passed'):
     command.extend(['--reuse-passed', settings['reuse_passed']])
+if settings.get('resume_from'):
+    command.extend(['--resume-from', settings['resume_from']])
 for name in settings.get('skip') or []:
     command.extend(['--skip', name])
 with (root / 'worker.log').open('ab', buffering=0) as log:
@@ -76,6 +79,7 @@ if ($result.ReturnValue -ne 0) { throw ('Windows process service rejected launch
 @{ bootstrap_pid=$result.ProcessId; started_utc=(Get-Date).ToUniversalTime().ToString('o') } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Work 'launch-process.json') -Encoding UTF8
 $resume = '"' + $Python + '" -B "' + (Join-Path $snapshot 'scripts\render_queue.py') + '" --work "' + $Work + '" --examples "' + $Examples + '" --render-scale ' + $RenderScale + ' --retry-failed'
 if ($Libraries) { $resume += ' --libraries "' + (Join-Path $snapshot 'native') + '"' }
+if ($ResumeFrom) { $resume += ' --resume-from "' + (Resolve-Path $ResumeFrom).Path + '"' }
 foreach ($name in $Skip) { $resume += ' --skip ' + $name }
 $resume | Set-Content -LiteralPath (Join-Path $Work 'resume-command.txt') -Encoding UTF8
 Write-Output ('Detached queue bootstrap PID: ' + $result.ProcessId)

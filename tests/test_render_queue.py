@@ -261,3 +261,87 @@ class SolverNameTests(unittest.TestCase):
                 watchdog.check(child)
             child.terminate.assert_not_called()
             self.assertIsNone(watchdog.absent_since)
+
+
+class QueueResumeTests(unittest.TestCase):
+    """An interrupted plane preset is continued, not solved from the preload again."""
+
+    def preset_runs(self, root, name, frames):
+        runs = root / "runs" / name
+        for stamp, count in frames.items():
+            directory = runs / f"{name}_{stamp}"
+            directory.mkdir(parents=True)
+            (directory / "summary.json").write_text(
+                json.dumps({"status": "failed", "frames": [{}] * count})
+            )
+        return runs
+
+    def test_earlier_attempts_are_offered_newest_queue_first(self):
+        from gelsight_ansys.batch.render_queue import earlier_runs
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            work, previous = root / "queue_b", root / "queue_a"
+            name = "plane_soft_rubber_press_slide"
+            self.preset_runs(previous, name, {"20260914T010000Z": 120})
+            self.assertEqual(
+                earlier_runs(work, previous, name), [previous / "runs" / name]
+            )
+            self.preset_runs(work, name, {"20260914T020000Z": 5})
+            self.assertEqual(
+                earlier_runs(work, previous, name),
+                [work / "runs" / name, previous / "runs" / name],
+            )
+            # Nothing to offer when no attempt exists.
+            self.assertEqual(earlier_runs(work, previous, "plane_other"), [])
+            self.assertEqual(earlier_runs(work, None, name), [work / "runs" / name])
+
+    def test_the_furthest_resumable_attempt_wins_and_refusals_are_said(self):
+        from gelsight_ansys.batch.validate_plane import resumable
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = Config.load(
+                Path(__file__).resolve().parents[1]
+                / "configs/material_plane_slide/soft_rubber.json"
+            )
+            runs = self.preset_runs(
+                root,
+                config.name,
+                {"20260914T010000Z": 40, "20260914T020000Z": 180, "20260914T030000Z": 9},
+            )
+            said = []
+            accepted = {runs / f"{config.name}_20260914T020000Z"}
+
+            def accept(directory, _config, **kwargs):
+                if Path(directory) not in accepted:
+                    raise ValueError("solver restart files are missing")
+                return None, {}
+
+            with patch(
+                "gelsight_ansys.plane_restart.validate_plane_resume", accept
+            ):
+                chosen = resumable(runs, config, progress=said.append)
+            self.assertEqual(chosen.name, f"{config.name}_20260914T020000Z")
+            # The 40-frame attempt is refused and reported; the 9-frame one is
+            # never even tried, because it cannot beat what is already found.
+            self.assertEqual(len(said), 1)
+            self.assertIn("20260914T010000Z", said[0])
+            self.assertIn("restart files are missing", said[0])
+
+    def test_nothing_resumable_means_a_fresh_run(self):
+        from gelsight_ansys.batch.validate_plane import resumable
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = Config.load(
+                Path(__file__).resolve().parents[1]
+                / "configs/material_plane_slide/soft_rubber.json"
+            )
+            runs = self.preset_runs(root, config.name, {"20260914T010000Z": 12})
+            with patch(
+                "gelsight_ansys.plane_restart.validate_plane_resume",
+                side_effect=ValueError("Resume cannot change the mechanical setup"),
+            ):
+                self.assertIsNone(resumable(runs, config, progress=lambda _: None))
+            self.assertIsNone(resumable(root / "runs" / "absent", config))

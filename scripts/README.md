@@ -17,7 +17,7 @@ stays thin and that the command behind it still answers `--help`.
 | `validate_plane.py` | Run a plane-contact preset as a licensed validation and record whether it passed. |
 | `fill_plane_frame.py` | Render a frame a plane run solved but never wrote, from its result file, and rebuild the report. |
 | `validate_plane_contact.py` | Launch licensed contact-law coupons with prescribed gaps and exact force checks; requires native libraries. |
-| `render_queue.py` | Discover the shipped presets and run them in order. |
+| `render_queue.py` | Discover the shipped presets and run them in order; `--resume-from` a previous queue continues a plane preset that was interrupted there. |
 | `start_render_queue.ps1` | Windows launcher for it: snapshots the tree, then starts a detached worker that survives the shell. |
 | `export_examples.py` | Write the documentation examples from finished runs. |
 | `audit_examples.py` | Check every exported preset against its current preset, manifest hashes, and the RGB difference identity; `--run` audits a curated export outside the catalog. |

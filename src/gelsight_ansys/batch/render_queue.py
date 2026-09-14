@@ -183,7 +183,22 @@ class SolverWatchdog:
             )
 
 
-def run_validation(work, job, scale, executable, heartbeat, libraries=None):
+def earlier_runs(work, resume_from, name):
+    """Where this preset's earlier attempts live, newest queue first.
+
+    A queue relaunch gets its own work directory, so an attempt interrupted by
+    a code fix or a stopped worker sits under the previous one. Both are
+    offered; the validator decides which, if either, the restart rules accept.
+    """
+    roots = [work / "runs" / name]
+    if resume_from:
+        roots.append(Path(resume_from) / "runs" / name)
+    return [root for root in roots if root.is_dir() and any(root.glob(f"{name}_*"))]
+
+
+def run_validation(
+    work, job, scale, executable, heartbeat, libraries=None, resume_from=None
+):
     output = work / "runs" / job["name"]
     output.mkdir(parents=True, exist_ok=True)
     validation = output / "validation.json"
@@ -249,6 +264,9 @@ def run_validation(work, job, scale, executable, heartbeat, libraries=None):
         ]
         if libraries:
             command.extend(["--libraries", str(libraries)])
+        for root in earlier_runs(work, resume_from, job["name"]):
+            command.extend(["--resume-from", str(root)])
+            break
     if executable:
         command.extend(["--exec-file", str(executable)])
     with (output / "validation.log").open("a", encoding="utf-8") as log:
@@ -320,6 +338,13 @@ def main(argv=None):
     parser.add_argument("--render-scale", type=int, default=4)
     parser.add_argument("--exec-file", type=Path)
     parser.add_argument("--libraries", type=Path)
+    parser.add_argument(
+        "--resume-from",
+        type=Path,
+        help="A previous queue's work directory; a plane preset interrupted "
+        "there is continued rather than solved again, when the restart rules "
+        "accept it",
+    )
     parser.add_argument(
         "--reuse-passed",
         type=Path,
@@ -433,6 +458,7 @@ def main(argv=None):
                     args.exec_file,
                     heartbeat,
                     args.libraries,
+                    args.resume_from,
                 )
                 record = json.loads(validation.read_text())[job["key"]]
                 source = validation.parent / record["run"]

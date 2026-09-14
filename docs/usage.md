@@ -84,6 +84,15 @@ independently. To keep the existing solve checkpoints but save a frame every
 python scripts/run_simulation.py run --config configs/material_plane_slide/soft_rubber.json --sample-interval-s 0.05 --render-scale 4
 ```
 
+A plane preset that was interrupted - by a failure, a stopped worker, or a fix
+to the code that reads its results - can be continued instead of solved again:
+`validate_plane.py --resume-from <directory of earlier runs>` picks the furthest
+attempt the [restart rules](convergence.md) accept, and the detached queue
+passes its own and the previous queue's run directories automatically when
+started with `-ResumeFrom <previous queue directory>`. Anything the rules refuse
+falls back to a fresh run with the reason printed, so a changed mesh or a
+changed protocol is never silently continued.
+
 `--sample-interval-s` controls saved states, images, and GIF frames.
 `--solve-interval-s` controls mechanical checkpoints; ANSYS can take smaller
 adaptive substeps inside each checkpoint interval. `--maximum-time-increment-s`
