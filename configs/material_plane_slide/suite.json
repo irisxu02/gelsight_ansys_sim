@@ -370,6 +370,8 @@
       "deformable_max_edge_m": 0.0005,
       "smooth_rigid_target": "single_exact_quad",
       "rough_rigid_target": "retain_resolved_height_geometry",
+      "rigid_texture_max_edge_m": 0.00035,
+      "rigid_texture_note": "Half the gel's 0.70 x 0.69 mm contact face, so the target is finer than the surface that has to sense it without being finer than anything that surface can register. It also has to satisfy the case's own minimum_elements_per_shortest_wavelength, which validation checks against both this size and the gel mesh. It used to be built at common_contact_surface_max_edge_m instead: 0.125 mm, 48 quads across the shortest wavelength where the case asked for 8, and 134,400 target segments for a shape the gel samples 1,080 times.",
       "note": "Object discretization is independent of the unchanged gel mesh. Use matched to compare against the original contact-matched solid grid."
     },
     "gel_mesh": "uniform"

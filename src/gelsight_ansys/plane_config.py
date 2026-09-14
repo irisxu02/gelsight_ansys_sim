@@ -333,6 +333,7 @@ class PlaneCase:
             "homogenized_planar_pile_envelope",
         ):
             raise ValueError("Unsupported plane surface model")
+        self.validate_surface_resolution()
         if surface["model"] == "sinusoidal_height_field" and self.bulk["model"] != "rigid":
             # Only the rigid target carries the height field; the deformable
             # slab is meshed with a flat contact face, so accepting the texture
@@ -472,6 +473,63 @@ class PlaneCase:
             raise ValueError(
                 "Frame times must be mechanical checkpoints; "
                 f"{missing.size} are not, first at {missing[0]:.6g} s"
+            )
+
+    def shortest_wavelength(self):
+        """The finest in-plane feature the declared surface height field holds."""
+        lengths = [
+            mode[axis]
+            for mode in self.case["surface_geometry"].get("modes", [])
+            for axis in ("wavelength_x_m", "wavelength_y_m")
+            if mode.get(axis) is not None
+        ]
+        return min(lengths) if lengths else None
+
+    def validate_surface_resolution(self):
+        """A declared texture must be resolved by the meshes that carry and sense it.
+
+        The case states how many elements its shortest wavelength needs. That is
+        a requirement on two surfaces: the rigid target the height field is built
+        on, and the gel face grid that has to register it. Neither was checked,
+        and the target was built five times finer than the gel that senses it
+        while the case asked for a sixth of that.
+        """
+        from .plane_mesh import texture_edge
+
+        wavelength = self.shortest_wavelength()
+        if wavelength is None:
+            return
+        if not math.isfinite(wavelength) or wavelength <= 0:
+            raise ValueError("Surface wavelengths must be positive")
+        required = self.case["surface_geometry"].get(
+            "minimum_elements_per_shortest_wavelength"
+        )
+        if required is None:
+            raise ValueError(
+                "A surface height field must declare "
+                "minimum_elements_per_shortest_wavelength"
+            )
+        if type(required) is not int or required < 2:
+            raise ValueError(
+                "minimum_elements_per_shortest_wavelength must be an integer of at least 2"
+            )
+        gel = self.suite["sensor"]["gel"]
+        surfaces = {
+            "the rigid target": texture_edge(self),
+            "the gel contact face": max(
+                gel["width_m"] / gel["elements"][0], gel["length_m"] / gel["elements"][1]
+            ),
+        }
+        for name, edge in surfaces.items():
+            if edge > wavelength / required + 1e-12:
+                raise ValueError(
+                    f"{name} is {edge * 1000:.3g} mm, which puts "
+                    f"{wavelength / edge:.1f} elements across the {wavelength * 1000:.3g} mm "
+                    f"wavelength; the case requires {required}"
+                )
+        if surfaces["the rigid target"] > surfaces["the gel contact face"] + 1e-12:
+            raise ValueError(
+                "The textured target must be at least as fine as the gel faces that sense it"
             )
 
     def validate_transient(self):

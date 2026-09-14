@@ -93,8 +93,26 @@ def slab_mesh(
     return ObjectMesh(mesh.coordinates, mesh.hexes, bottom_quads, mesh.surface_nodes)
 
 
+def texture_edge(case, object_mode="simplified"):
+    """Edge length of the rigid target that carries a surface height field.
+
+    A textured target is geometry, not a body: it adds no degrees of freedom,
+    so its cost is contact search and storage rather than equations. It still
+    has to resolve the shape it represents, which is what the case's
+    minimum_elements_per_shortest_wavelength asks for, and it should not be
+    coarser than the sensing surface it is searched against. The matched mode
+    keeps the contact-matched grid it exists to compare with.
+    """
+    rules = case.suite["discretization"]
+    if object_mode == "matched":
+        return rules["common_contact_surface_max_edge_m"]
+    return rules.get("object_mesh", {}).get(
+        "rigid_texture_max_edge_m", rules["common_contact_surface_max_edge_m"]
+    )
+
+
 def textured_target(case, clearance, element_size=None, *, object_mode="simplified"):
-    specimen, rules = case.suite["specimen"], case.suite["discretization"]
+    specimen = case.suite["specimen"]
     if object_mode == "simplified" and not case.case["surface_geometry"].get("modes"):
         hx, hy = specimen["width_m"] / 2, specimen["length_m"] / 2
         # One exact plane facet removes artificial internal target boundaries.
@@ -107,7 +125,7 @@ def textured_target(case, clearance, element_size=None, *, object_mode="simplifi
             ]
         )
         return points, np.array([[0, 1, 2, 3]])
-    size = element_size or rules["common_contact_surface_max_edge_m"]
+    size = element_size or texture_edge(case, object_mode)
     x = np.linspace(
         -specimen["width_m"] / 2,
         specimen["width_m"] / 2,

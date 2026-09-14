@@ -183,6 +183,23 @@ keys ending in `_note`. What each becomes in ANSYS:
 The same rule applies to `solver`: its keys are the `Solver` fields plus
 `maximum_time_increment_s`, which shapes the schedule, plus a free-text `note`.
 
+## Resolving a declared surface
+
+A case that declares a surface height field also declares how finely it must be
+resolved, as `minimum_elements_per_shortest_wavelength`. That requirement binds
+two surfaces, and validation checks both: the rigid target the height field is
+built on, sized by `discretization.object_mesh.rigid_texture_max_edge_m`, and
+the gel contact faces that have to register it. The target must also be no
+coarser than those gel faces.
+
+The shipped rough surface has 7.2 mm and 6.0 mm wavelengths and asks for eight
+elements across the shortest. The gel's 0.69 mm faces give 8.7. The target is
+meshed at 0.35 mm, half a gel face: 17 elements per wavelength, a deviation
+from the exact height field below 0.5 µm on 60 µm of relief, and 17,372 target
+segments. It used to be built at `common_contact_surface_max_edge_m`, which made
+it 0.125 mm and 134,400 segments - 48 elements per wavelength where the case
+asked for 8, on a shape the gel samples 1,080 times.
+
 ## One statement of each setting
 
 A resolved plane run carries the sensor, the contact definition and the solver

@@ -124,13 +124,37 @@ class PlaneMeshTests(unittest.TestCase):
         self.assertEqual(Config.from_dict(config.to_dict()).to_dict(), config.to_dict())
 
     def test_rough_geometry_is_not_flattened_by_simplification(self):
+        """Simplifying the target coarsens its grid; it keeps the height field."""
         case = self.case("rough_surface")
         a, qa = textured_target(case, 0)
         b, qb = textured_target(case, 0, object_mode="matched")
-        np.testing.assert_array_equal(a, b)
-        np.testing.assert_array_equal(qa, qb)
-        self.assertGreater(np.ptp(a[:, 2]), 50e-6)
-        self.assertEqual(len(qa), 134400)
+        peak = sum(m["amplitude_m"] for m in case.case["surface_geometry"]["modes"])
+        for points in (a, b):
+            self.assertAlmostEqual(np.ptp(points[:, 2]), 2 * peak, places=7)
+        self.assertLess(len(qa), len(qb))
+        # The matched grid is the contact-matched one it exists to compare with.
+        self.assertEqual(
+            len(qb),
+            int(np.ceil(0.06 / 0.000125)) * int(np.ceil(0.035 / 0.000125)),
+        )
+
+    def test_a_simplified_texture_still_resolves_its_shortest_wavelength(self):
+        from gelsight_ansys.plane_mesh import texture_edge
+
+        case = self.case("rough_surface")
+        declared = case.case["surface_geometry"]["minimum_elements_per_shortest_wavelength"]
+        edge = texture_edge(case)
+        self.assertGreaterEqual(case.shortest_wavelength() / edge, declared)
+        # And it is no coarser than the gel faces that have to sense it.
+        gel = case.suite["sensor"]["gel"]
+        self.assertLessEqual(edge, gel["width_m"] / gel["elements"][0])
+        # Its deviation from the exact height field stays well under a micron.
+        points, _ = textured_target(case, 0)
+        x = np.unique(points[:, 0])
+        fine = np.linspace(x[0], x[1], 33)
+        exact = case.surface_height(fine, np.zeros_like(fine))
+        interpolated = np.interp(fine, x[:2], case.surface_height(x[:2], np.zeros(2)))
+        self.assertLess(np.abs(exact - interpolated).max(), 1e-6)
 
 
 if __name__ == "__main__":
