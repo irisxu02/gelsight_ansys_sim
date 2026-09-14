@@ -5,27 +5,29 @@ so a control that the configuration declares cannot be read by one adapter and
 silently ignored by another.
 """
 
-# ANSYS's own CUTCONTROL values. They are written explicitly, so a restart that
-# returns a control to its default restates it rather than leaving whatever the
-# resumed database last held.
-DEFAULT_TRANSIENT_POINTS_PER_CYCLE = 13
-
-
 def equation_solver_command(solver):
     """EQSLV from the declared equation solver; MAPDL names it in upper case."""
     return f"EQSLV,{solver.equation_solver.upper()}"
 
 
 def cutback_commands(solver):
-    points = (
-        DEFAULT_TRANSIENT_POINTS_PER_CYCLE
-        if solver.transient_points_per_cycle is None
-        else solver.transient_points_per_cycle
+    """Automatic time stepping controls, stated only where the setup states them.
+
+    NPOINT has no value that means "whatever ANSYS would have done": writing a
+    number is choosing one. A declared null leaves the command unsent, which is
+    what the setups mean by it. Naming a guessed default here instead cut the
+    transient increment by a factor of two and a half, on every plane run,
+    while every substep still converged in one iteration - slower solving that
+    looked like harder physics. NOITERPREDICT is different: 0 and 1 are the two
+    behaviours, not a default and an override, so it is always stated.
+    """
+    commands = []
+    if solver.transient_points_per_cycle is not None:
+        commands.append(f"CUTCONTROL,NPOINT,{solver.transient_points_per_cycle}")
+    commands.append(
+        f"CUTCONTROL,NOITERPREDICT,{0 if solver.predict_cutback else 1}"
     )
-    return [
-        f"CUTCONTROL,NPOINT,{points}",
-        f"CUTCONTROL,NOITERPREDICT,{0 if solver.predict_cutback else 1}",
-    ]
+    return commands
 
 
 def diagnostics_commands(solver):

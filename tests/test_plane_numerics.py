@@ -691,18 +691,40 @@ class TransientWindowTests(unittest.TestCase):
         self.assertGreater(kept, gap)
 
     def test_time_stepping_accuracy_controls_reach_the_solver(self):
-        """Both default to ANSYS's own values, written out so a restart that
-        returns to the default restates it instead of inheriting the database's."""
+        """A declared points-per-cycle reaches the solver; a null one sends no
+        command at all, because naming a number is choosing one."""
         from gelsight_ansys.config import Solver
 
         default = solution_control_commands(Solver())
-        self.assertIn("CUTCONTROL,NPOINT,13", default)
+        self.assertEqual([c for c in default if c.startswith("CUTCONTROL,NPOINT")], [])
+        # Cutback prediction has two behaviours, not a default and an override.
         self.assertIn("CUTCONTROL,NOITERPREDICT,0", default)
         tuned = solution_control_commands(
             Solver(transient_points_per_cycle=3, predict_cutback=False)
         )
         self.assertIn("CUTCONTROL,NPOINT,3", tuned)
         self.assertIn("CUTCONTROL,NOITERPREDICT,1", tuned)
+
+    def test_a_resume_cannot_clear_a_declared_points_per_cycle(self):
+        """The resumed database keeps what it was built with; no command undoes it."""
+        import tempfile as tmpmod
+        from pathlib import Path as P
+
+        from test_plane_restart import PlaneRestartTests, release_config
+
+        from gelsight_ansys.plane_restart import validate_plane_resume
+
+        with tmpmod.TemporaryDirectory() as tmp:
+            root = P(tmp)
+            config, _, _ = PlaneRestartTests().fixture(root)
+            (root / "config.json").write_text(
+                json.dumps(config.with_solver(transient_points_per_cycle=3).to_dict())
+            )
+            cleared = release_config(config).with_solver(
+                transient_points_per_cycle=None
+            )
+            with self.assertRaisesRegex(ValueError, "cannot clear"):
+                validate_plane_resume(root, cleared, numerics_override=True)
 
     def test_the_sphere_adapter_reads_the_same_controls(self):
         """A control the configuration accepts reaches every adapter's deck."""

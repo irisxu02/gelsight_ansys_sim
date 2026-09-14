@@ -79,6 +79,18 @@ def validate_plane_resume(
             if {k: v for k, v in a[key].items() if k not in NUMERICS_ONLY} == {
                 k: v for k, v in b[key].items() if k not in NUMERICS_ONLY
             }:
+                if (
+                    a[key]["transient_points_per_cycle"] is not None
+                    and b[key]["transient_points_per_cycle"] is None
+                ):
+                    # The resumed database holds the value the first run set,
+                    # and there is no command that means "go back to whatever
+                    # ANSYS would have chosen", so the clear cannot be honoured.
+                    raise ValueError(
+                        "A resume cannot clear transient_points_per_cycle; the "
+                        "resumed database keeps the value it was built with. "
+                        "State a value, or start a fresh run."
+                    )
                 continue
             raise ValueError(
                 "A diagnostic resume may only vary "
