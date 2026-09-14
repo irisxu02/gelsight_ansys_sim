@@ -1,0 +1,29 @@
+"""Render the frames a plane run solved but never wrote, then rebuild its report."""
+
+import argparse
+from pathlib import Path
+
+from .fill_frame import fill_missing_frames
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--run", type=Path, required=True, help="Finished run directory")
+    parser.add_argument(
+        "--nonmisc-base",
+        type=int,
+        help="CONTA174 NMISC offset, ETYIQR(2,-110); needed for runs that did not record it",
+    )
+    parser.add_argument(
+        "--refill",
+        type=int,
+        action="append",
+        default=[],
+        metavar="INDEX",
+        help="Render this frame again even though it is recorded (repeatable)",
+    )
+    args = parser.parse_args(argv)
+    filled = fill_missing_frames(args.run, args.nonmisc_base, refill=args.refill)
+    print(f"{len(filled)} frame(s) filled; report rebuilt in {args.run}")
+    return 0
+

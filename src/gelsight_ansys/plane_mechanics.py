@@ -70,16 +70,16 @@ class AnsysPlane(AnsysSession):
 
     @classmethod
     def offline_reader(cls, config, solver_directory, nonmisc_base):
-        """A model that reads a finished run's result file and never opens a solver.
+        """Read a finished run's results, with no solver and no deck.
 
-        The geometry is set up exactly as the run's was, from the same
-        configuration; the deck is composed and discarded. Native adapters are
-        not loaded - the result file already holds what they computed - and the
-        NMISC offset is the one the run recorded, since it is read from MAPDL at
-        build time and nowhere else.
+        The bodies are rebuilt from the same configuration the run used, which
+        is what the result reader indexes by; nothing is sent anywhere. Native
+        adapters are not loaded - the result file already holds what they
+        computed - and the NMISC offset is the one the run recorded, since it is
+        read from MAPDL at build time and nowhere else.
         """
         model = cls(config, solver_directory, offline=True)
-        model.model_commands()
+        model.prepare_geometry()
         model.nonmisc_base = int(nonmisc_base)
         # Solve timings belong to a solver session; a frame rendered offline has none.
         model.last_timings = {}
@@ -128,15 +128,54 @@ class AnsysPlane(AnsysSession):
             )
         np.savez_compressed(self.directory.parent / "solid_mesh.npz", **geometry)
 
-    def model_commands(self):
-        """Compose the model deck, setting up the geometry it describes."""
+    def prepare_geometry(self):
+        """Build the bodies the run is made of, without composing any commands.
+
+        Meshing, the platen's reference point, and the numbering the result
+        reader indexes by are all decided here. Reading a finished run's results
+        needs exactly this and no solver: the deck it would have sent is a
+        separate step.
+        """
         c, mesh = self.config, self.mesh
-        ns, nf = self.contact_start, len(mesh.surface_quads)
         clearance = c.indenter.clearance_m
         self.pilot = len(mesh.coordinates) + 1
         self.initial_pilot = np.array(
             [0.0, 0.0, clearance + self.case.suite["specimen"]["thickness_m"]]
         )
+        if c.indenter.deformable:
+            self.object_mesh = slab_mesh(
+                self.case,
+                clearance,
+                c.plane_options.element_size_m,
+                object_mode=c.plane_options.object_mesh,
+                object_size=c.plane_options.object_element_size_m,
+            )
+            self.object_offset = len(mesh.coordinates)
+            self.object_displacement = np.zeros_like(self.object_mesh.coordinates)
+            if self.symmetric_contact:
+                # The reversed pair is numbered after everything the result
+                # reader indexes, so the gel-side block keeps its numbering.
+                self.second_pair_start = (
+                    self.contact_start
+                    + len(mesh.surface_quads)
+                    + len(self.object_mesh.hexes)
+                    + len(self.object_mesh.surface_quads)
+                    + 1
+                )
+        else:
+            self.target_reference, self.target_quads = textured_target(
+                self.case,
+                clearance,
+                c.plane_options.element_size_m,
+                object_mode=c.plane_options.object_mesh,
+            )
+        return self
+
+    def model_commands(self):
+        """Compose the model deck for the geometry this run is made of."""
+        self.prepare_geometry()
+        c, mesh = self.config, self.mesh
+        ns, nf = self.contact_start, len(mesh.surface_quads)
         cmds = [
             "FINISH",
             "/FCOMP,RST,0",
@@ -170,15 +209,7 @@ class AnsysPlane(AnsysSession):
             for i, q in enumerate(mesh.surface_quads)
         ]
         if c.indenter.deformable:
-            self.object_mesh = slab_mesh(
-                self.case,
-                clearance,
-                c.plane_options.element_size_m,
-                object_mode=c.plane_options.object_mesh,
-                object_size=c.plane_options.object_element_size_m,
-            )
             obj = self.object_mesh
-            self.object_offset = len(mesh.coordinates)
             cmds += [
                 "ET,5,SOLID185",
                 f"KEYOPT,5,6,{int(self.case.bulk.get('formulation') == 'mixed_up')}",
@@ -201,10 +232,7 @@ class AnsysPlane(AnsysSession):
                 for i, q in enumerate(obj.surface_quads)
             ]
             if self.symmetric_contact:
-                # The reversed pair is numbered after everything the result
-                # reader indexes, so the gel-side block keeps its numbering.
-                start = ns + nf + len(obj.hexes) + len(obj.surface_quads)
-                self.second_pair_start = start + 1
+                start = self.second_pair_start - 1
                 cmds += contact_real_commands(c.indenter, 2)
                 cmds += contact_damping_commands(c.indenter, 2, number=2)
                 cmds += ["TYPE,2", "REAL,2", "MAT,3"]
@@ -233,16 +261,8 @@ class AnsysPlane(AnsysSession):
             else:
                 cmds.append("D,ALL,ALL,0")
             cmds.append("ALLSEL,ALL")
-            self.object_displacement = np.zeros_like(obj.coordinates)
         else:
-            points, faces = textured_target(
-                self.case,
-                clearance,
-                c.plane_options.element_size_m,
-                object_mode=c.plane_options.object_mesh,
-            )
-            self.target_reference = points
-            self.target_quads = faces
+            points, faces = self.target_reference, self.target_quads
             cmds += [f"N,{self.pilot},0,0,{self.initial_pilot[2]:.16g}"]
             cmds += [
                 f"N,{self.pilot + i + 1},{x:.16g},{y:.16g},{z:.16g}"

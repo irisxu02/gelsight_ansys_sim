@@ -12,6 +12,7 @@ from .camera import optical_surface
 from .config import Camera
 from .plane_coverage import ContactCoverage
 from .plane_mechanics import AnsysPlane
+from .run_contract import completion_status
 from .run_services import RunLifecycle, create_run, prepare_optics, process_frame
 from .surface import Markers, image_coordinates
 
@@ -38,20 +39,6 @@ def render_unloaded_reference(reference, config, renderer, markers=None):
         "displacement_m": np.zeros_like(optical["optical_position_m"]),
     }
     return renderer.render(baseline_fields, rest_pixels, rest_pixels)
-
-
-def completion_status(summary):
-    """The status a run earns once every check has passed.
-
-    A diagnostic run varied convergence controls part-way, so its frames are
-    solver evidence rather than a dataset; a pilot stopped short or used a
-    coarse mesh. Only a production run over the whole recorded interval passes.
-    """
-    if summary.get("diagnostic_run"):
-        return "diagnostic_passed"
-    if summary.get("production_mesh") and summary.get("complete_recorded_interval"):
-        return "passed"
-    return "pilot_passed"
 
 
 def time_semantics(case):

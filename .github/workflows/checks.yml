@@ -30,23 +30,6 @@ jobs:
         run: |
           python -m pip install ruff
           ruff check src scripts tests
-      - name: Check command-line entry points
-        run: |
-          python scripts/ansys_smoke_test.py --help
-          python scripts/ansys_license_probe.py --help
-          python scripts/run_simulation.py --help
-          python scripts/validate_simulation.py --help
-          python scripts/resume_simulation.py --help
-          python scripts/export_examples.py --help
-          python scripts/compare_rendering.py --help
-          python scripts/audit_examples.py --help
-          python scripts/benchmark_projection.py --help
-          python scripts/benchmark_solvers.py --help
-          python scripts/render_queue.py --help
-          python scripts/run_simulation.py run --config configs/material_plane_slide/soft_rubber.json --dry-run
-          python scripts/validate_plane.py --help
-          python scripts/validate_plane_contact.py --help
-          python scripts/build_plane_adapters.py --help
-          python scripts/parse_solver_monitor.py --help
-          python scripts/parse_contact_tracking.py --help
-          python scripts/contact_health.py --help
+      # Every launcher is checked by tests/test_entry_points.py, which runs above.
+      - name: Check a shipped preset resolves without a solver
+        run: python scripts/run_simulation.py run --config configs/material_plane_slide/soft_rubber.json --dry-run

@@ -269,11 +269,41 @@ class Config:
     def is_plane(self):
         return self.indenter.shape == "plane"
 
+    def suite_updated(self, **sections):
+        """Restate suite settings a runtime override changed.
+
+        A plane run reads its sensor, contact and solver settings from the
+        setup; the resolved dataclasses carry the same values. An override has
+        to change both, or the record would state one setting twice and
+        disagree with itself.
+        """
+        if not self.is_plane:
+            return self
+        # PlaneCase copies what it is given, so the receiver keeps its own.
+        specification = PlaneCase(self.specification.suite, self.specification.case)
+        for path, values in sections.items():
+            target = specification.suite
+            for key in path.split("."):
+                target = target[key]
+            target.update(values)
+        return replace(self, specification=specification)
+
     def with_solver(self, **overrides):
-        return replace(self, solver=replace(self.solver, **overrides)).validate()
+        from .simulation_config import ALLOCATION_KEYS
+
+        updated = replace(self, solver=replace(self.solver, **overrides))
+        declared = {k: v for k, v in overrides.items() if k not in ALLOCATION_KEYS}
+        return updated.suite_updated(solver=declared).validate()
 
     def with_optics(self, **overrides):
-        return replace(self, optics=replace(self.optics, **overrides)).validate()
+        from .simulation_config import SCALE_KEYS
+
+        if self.is_plane and set(overrides) & set(SCALE_KEYS):
+            raise ValueError(
+                "Marker pixel geometry follows the camera scale; use with_render_scale"
+            )
+        updated = replace(self, optics=replace(self.optics, **overrides))
+        return updated.suite_updated(**{"sensor.optics": overrides}).validate()
 
     def with_gel_material(self, **overrides):
         """Change the sensor gel's constitutive or element settings in place.
@@ -292,7 +322,12 @@ class Config:
         return updated.validate()
 
     def with_contact_damping(self, **overrides):
-        return replace(self, indenter=replace(self.indenter, **overrides)).validate()
+        from .simulation_config import contact_rules
+
+        updated = replace(self, indenter=replace(self.indenter, **overrides))
+        return updated.suite_updated(
+            contact_numerics=contact_rules(updated.indenter)
+        ).validate()
 
     def with_plane_options(self, **overrides):
         if not self.is_plane:
@@ -375,6 +410,10 @@ class Config:
 
     def with_contact_refinement(self):
         """Apply the preview's local mesh grading, preserving dimensions and counts."""
+        if self.is_plane:
+            raise ValueError(
+                "A plane run's gel mesh is declared in its setup's discretization"
+            )
         return replace(
             self,
             gel=replace(
@@ -641,6 +680,21 @@ class Config:
                     "Deformable spheres and imported volumes currently support translation only"
                 )
             previous = pose.time_s
+        if self.is_plane:
+            from .simulation_config import plane_consistency_errors
+
+            # The suite declares the sensor, the contact table and the solver
+            # once. A resolved run carries the same values in its common fields
+            # for every adapter to read; if the two could differ, a setting
+            # changed in one of them would be accepted and then ignored. This
+            # runs last, so a specific rule reports itself first.
+            disagreements = plane_consistency_errors(self)
+            if disagreements:
+                raise ValueError(
+                    "Resolved plane settings disagree with their setup: "
+                    + "; ".join(disagreements)
+                )
+
         return self
 
     def to_dict(self):

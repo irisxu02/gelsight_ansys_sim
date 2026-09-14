@@ -1,4 +1,4 @@
-# Dataset reference (schema version 1)
+# Dataset reference
 
 [Documentation](README.md) · [Usage](usage.md) · [Architecture](architecture.md)
 
@@ -9,7 +9,13 @@ curated PNG/GIF previews and source presets; numerical arrays, per-frame images,
 generated metadata, and interactive reports are generated locally and ignored.
 See [example sharing rules](examples/README.md#exporting-new-snapshots).
 
-Each run contains:
+Read schema versions per file: current general-contact summaries use
+`schema_version: 1`, plane summaries use `schema_version: 2`, and newly resolved
+`config.json` files use schema 4. These describe different records; there is no
+single schema version for every file in a run.
+
+A completed run contains the following shared outputs, with conditional files
+identified below:
 
 ```text
 config.json              resolved, reusable input configuration
@@ -20,7 +26,7 @@ report.html              local interactive viewer (no web service required)
 preview.png              representative force/shear/torque frame
 force_curve.png          loading curve and force components
 images/frame_XXXX.png    uint8 RGB (H, W, 3)
-process.gif              all four panels over the full cycle
+process.gif              all four panels over the recorded trajectory
 visualization.json       fixed color limits, marker scale, GIF timing
 solid_mesh.npz           gel and optional object reference mesh
 bodies/frame_XXXX.npz    whole-body gel and optional object displacement
@@ -31,6 +37,26 @@ solver/                  raw MAPDL inputs, outputs, results and restart files
 private/error.log        traceback on failed runs
 background.png           copied optical background, when configured
 ```
+
+Plane runs additionally save:
+
+```text
+unloaded_reference.npz   native unloaded gel state before preload
+unloaded_reference.png   raw RGB baseline for every signed difference field
+contact/frame_XXXX.npz   contact fields at four integration points per element
+```
+
+The plane summary retains `initialization_substeps` for negative physical times
+and `recorded_substeps` for the recording, including solved states between saved
+frames. These records contain result identity, normal force, and coverage;
+recorded substeps also contain the contact/backing force residual and whether
+contact is required. They are history records, not additional image frames.
+
+For general-contact runs, frame zero is the analytical unloaded reference at
+the configured clearance. For plane runs, recorded frame zero is a solved,
+preloaded state at physical time 0; initialization carries material and contact
+history into recording. Always use the separate plane unloaded reference for
+RGB subtraction and reference marker attachments.
 
 Optional report outputs are `panels/frame_XXXX.png` (four-panel stills) and
 `tactile.gif` (RGB-only animation). Enable them with
@@ -65,32 +91,47 @@ Let N be the number of surface nodes, Q the number of contact quads, and T=2Q.
 | `contact_integration_status` | (Q,4), status at the same four integration points |
 | `contact_penetration_m` | (Q,), element contact penetration output |
 | `backing_reaction_n` | (3,), summed fixed-backing reaction |
-| `pilot_reaction_n`, `pilot_moment_nm` | (3,), rigid-pilot reactions or resultant reactions of the deformable sphere grip |
+| `pilot_reaction_n`, `pilot_moment_nm` | (3,), rigid-pilot or deformable-grip resultants; plane normal-load substitution is described below |
 | `pilot_position_m` | (3,), current rigid pilot or virtual grip-center position |
 
 Position is `reference_m + displacement_m`. Compression gives negative z contact
 force on the gel. `normal_force_n = -sum(contact_force_n[:,2])` is positive during
 normal indentation. Contact force opposes the backing reaction and matches the
-prescribed-motion pilot reaction in the tested convention.
+prescribed-motion pilot reaction in the tested quasi-static convention.
 
-Raw volume stresses and strains at each requested load-step endpoint remain in
-the MAPDL result file (`OUTRES,ALL,LAST`); the public NPZ
-contract exports the sensor surface and whole-body nodal displacement, without duplicating volume stress/strain fields.
+For load-controlled plane states, `pilot_reaction_n[2]` stores the negative
+commanded normal force because the loaded normal degree of freedom does not
+provide a constraint reaction. Its x/y components retain the extracted reactions.
+`platen_control` is `load`, `commanded_normal_force_n` records the applied load,
+and `pilot_moment_error_nm` is `null`: the coupled normal load's distribution
+over the platen is unavailable for an independent moment comparison.
+
+The general adapter retains raw volume stresses and strains at requested
+load-step endpoints in the MAPDL result file (`OUTRES,ALL,LAST`). The plane
+adapter instead requests nodal solutions and reactions at every substep, plus
+contact-element nodal loads and miscellaneous records. It does not request
+solid volume stress/strain output. Shared NPZ exports contain the sensor surface
+and whole-body nodal displacement.
 
 ## Whole-body meshes and displacement
 
 `solid_mesh.npz` contains `gel_reference_m`, `gel_hexes`, `gel_material_ids` (all 1),
 and `surface_nodes`. With a deformable
-sphere it also contains `indenter_reference_m`, `indenter_hexes`,
+sphere, imported volume, or slab it also contains `indenter_reference_m`, `indenter_hexes`,
 `indenter_surface_quads`, and `indenter_grip_nodes`. All connectivity and node
 selections are zero-based local indices. `bodies/frame_XXXX.npz` contains
 `gel_displacement_m` and, when applicable, `indenter_displacement_m`. These follow
-the corresponding reference mesh ordering and include the analytical zero frame.
-The body files and optical arrays always come from the same requested load-step endpoint.
+the corresponding reference mesh ordering. Rigid plane geometry instead uses
+`target_reference_m` and `target_quads` in `solid_mesh.npz`.
+General-contact body exports include the analytical zero frame; plane frame
+zero contains solved preload deformation. Body and optical outputs correspond
+to the same saved mechanical state.
 
-For deformable objects, prescribed depth is grip travel, not measured gel
-indentation. `max_indenter_deformation_m` measures displacement relative to the
-commanded translation; `indenter_grip_displacement_error_m` checks the drive.
+For deformable objects, `depth_m` is total grip/platen travel, not measured gel
+indentation. Under plane normal-load control it is read from the solved platen
+position; under travel control it is prescribed. `max_indenter_deformation_m`
+measures displacement relative to the grip translation, and
+`indenter_grip_displacement_error_m` checks agreement with that translation.
 `max_sticking_elastic_slip_m` measures contact penalty slip among sticking points,
 separate from physical marker deformation. A null value means no sticking point
 is available. New summaries retain the mechanical configuration and replay rejects
@@ -98,23 +139,37 @@ changes to it, while allowing optics changes.
 
 ## Raster and marker arrays
 
+Let `(Hf,Wf)` be the orthographic field grid and `(Hi,Wi)` the rendered image
+grid. General-contact runs use the configured image dimensions for both grids.
+Plane runs retain the setup's nominal field grid while scaling the optical grid:
+at render scale 4, fields are 240 × 320 and RGB is 960 × 1280. Plane summaries
+record these as `field_grid_width_height_px` and `optical_grid_width_height_px`
+(width first). `M` is the number of material markers.
+
 | Field | Shape / interpretation |
 |---|---|
-| `position_m`, `displacement_m`, `normals` | (H,W,3), spatially sampled surface geometry |
-| `normal_displacement_m` | (H,W), `-uz`, retains bulging outside contact |
-| `shear_displacement_m` | (H,W,2), signed `ux,uy`; not accumulated contact slip |
-| `contact_pressure_pa` | (H,W), sampled raw element-average pressure |
-| `contact_status`, `slip_mask` | (H,W), sampled element status and status==2 |
-| `valid_mask` | (H,W), pixel center lies on the projected gel surface |
-| `pixel_force_n` | (H,W,3), exactly integrated reconstructed force in each pixel |
-| `force_density_pa` | (H,W,3), pixel force / projected pixel area |
+| `position_m`, `displacement_m`, `normals` | (Hf,Wf,3), spatially sampled surface geometry |
+| `normal_displacement_m` | (Hf,Wf), `-uz`, retains bulging outside contact |
+| `shear_displacement_m` | (Hf,Wf,2), signed `ux,uy`; not accumulated contact slip |
+| `contact_pressure_pa` | (Hf,Wf), sampled raw element-average pressure |
+| `contact_status`, `slip_mask` | (Hf,Wf), sampled element status and status==2 |
+| `valid_mask` | (Hf,Wf), pixel center lies on the projected gel surface |
+| `pixel_force_n` | (Hf,Wf,3), exactly integrated reconstructed force in each pixel |
+| `force_density_pa` | (Hf,Wf,3), pixel force / projected pixel area |
 | `fov_force_n`, `raster_force_error_n` | (3,), independent clipped-FOV integral and raster residual |
 | `marker_reference_m`, `marker_position_m` | (M,3), fixed reference attachments and deformed positions |
 | `marker_pixel` | (M,2), projected (column,row) camera coordinates, possibly outside image |
 | `marker_reference_pixel`, `marker_flow_pixel` | (M,2), reference pixels and apparent pixel displacement |
-| `optical_position_m`, `optical_reference_m` | (H,W,3), current and material locations at camera rays |
-| `rgb_difference_int16` | (H,W,3), signed raw RGB minus first unloaded raw RGB, intensity units |
-| `optical_normals`, `optical_valid_mask` | (H,W,3), (H,W), ray-sampled shading normals and visibility |
+| `optical_position_m`, `optical_reference_m` | (Hi,Wi,3), current and material locations at camera rays; stored by the general adapter |
+| `rgb_difference_int16` | (Hi,Wi,3), signed raw RGB minus unloaded raw RGB, intensity units |
+| `optical_normals`, `optical_valid_mask` | (Hi,Wi,3), (Hi,Wi), ray-sampled normals and visibility; stored by the general adapter |
+
+Plane runs set `stored_optical_fields: false` and omit `optical_*` arrays from
+the NPZ files. Camera-ray geometry can be reconstructed from saved surface
+states and the camera configuration. Marker pixel coordinates and RGB
+differences still use the optical grid. Plane fields also include
+`macroscopic_bin_repulsive_force_n`, the integrated repulsive load in each
+coverage bin; it is separate from the image and force grids.
 
 For a partially covered pixel, `pixel_force_n` still includes its exact surface
 intersection even if the center is outside `valid_mask`. Do not multiply this
@@ -133,23 +188,50 @@ maps back to gel coordinates through `optical_position_m`; the renderer samples
 its dot texture at `optical_reference_m`. This preserves conservative force data
 without interpreting camera perspective as a change in physical force density.
 
+## Plane contact-point arrays
+
+`contact/frame_XXXX.npz` stores raw contact outputs with shape `(Q,4)` for
+`pressure` (Pa), `penetration` (m), `status`, `slip_r`, `slip_s`,
+`elastic_slip`, and `plastic_slip` (slip lengths in m). The second index follows
+the four integration points of each contact element, rather than image pixels.
+
+Custom contact adds `repulsive_pressure`, `attached_fraction`,
+`cumulative_dissipation_j_m2`, `point_area_m2`, and `point_solver_time_s` with
+shape `(Q,4)`; `friction_coefficients`, `plastic_slip_vector`, and
+`reference_point_xy_m` have shape `(Q,4,2)`, and `point_position_m` has shape
+`(Q,4,3)`. Positions and slip vectors use metres. `point_solver_time_s` is
+ANSYS solution time; the frame's `SurfaceState.time_s` is recorded physical time.
+These additional arrays are present only when the custom contact outputs exist.
+
 ## Metrics and acceptance
 
 `force_on_gel_n` uses native nodal loads. `moment_on_gel_nm` includes their
 deformed lever arms and `contact_couple_nm`. Moment is about
 the sensor origin. `center_of_pressure_m` uses signed z nodal loads and is `null`
-when normal force is effectively zero. Off-FOV load is reported separately.
+when `normal_force_n <= 1e-10 N`. Off-FOV load is reported separately.
 
 The launcher disables PyMAPDL no-abort mode. Each solve first requires `CNVG=1`, the requested result time, increasing
-load-step identity, and no forced nonconverged continuation. It must then pass
-contact/backing and contact/pilot force balance
+load-step identity, and no forced nonconverged continuation. Saved frames must
+pass contact/backing and contact/pilot force balance
 within `max(balance_tolerance * norm(force), 1e-6 N)`. Default relative tolerance
 is 2%. Raster force residual must be below `max(1e-8 * norm(force), 1e-10 N)`.
+Inside a plane window with inertia enabled, the contact/backing difference is
+recorded but is not gated by the quasi-static tolerance. The check resumes
+after the window. Contact/pilot and raster checks remain active on saved frames.
+For load control, the normal pilot comparison checks the delivered contact load
+against the commanded load.
+
+Every recorded plane substep also undergoes geometric coverage and edge-margin
+checks, required contact checks when the protocol demands contact, and the
+contact/backing check outside inertia windows. Substeps inside inertia windows
+record `balance_check: "inertial_window"`. Initialization substeps retain
+coverage measurements; full recorded-contact requirements begin with recording.
 These tolerances verify internal consistency, not experimental accuracy.
 
-`gpu_solver` stores solver activation and accelerated-work evidence. Frame zero
-has no equation solve, so solver GPU activity is false there. CUDA optics still
-renders the reference. Summary `gpu_mechanics_verified` requires positive GPU work
+`gpu_solver` stores solver activation and accelerated-work evidence. The general
+adapter's analytical frame zero has no equation solve, so solver GPU activity is
+false there. Plane frame zero has a solve and records its solver evidence.
+Summary `gpu_mechanics_verified` requires positive GPU work
 in the run. For optical replay it refers to the original solve, not new execution.
 
 Raw solver files and private tracebacks can contain environment-specific details;
@@ -168,9 +250,10 @@ in-plane magnitude in µm, rather than the total displacement dominated by depth
 
 The deformation, pressure and marker color limits are computed across the entire
 trajectory and held fixed in all panels. `process.gif` contains one annotated
-panel for every saved frame, including initial clearance and final release.
-When enabled, `tactile.gif` contains the corresponding RGB images; identical images may be
-combined into a longer GIF frame. Endpoint pauses are at least 700 ms. Animation
+panel for every saved frame. General presets include clearance and release;
+the shipped plane protocol records press, hold, slide, and hold with no release.
+When enabled, `tactile.gif` preserves one RGB frame per saved state, including
+identical consecutive images. Endpoint pauses are at least 700 ms. Animation
 timing is illustrative, and images are not interpolated into extra solver states.
 
 `visualization.json` records scales, frame count, preview selection, and GIF

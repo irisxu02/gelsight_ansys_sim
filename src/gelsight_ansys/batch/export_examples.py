@@ -6,6 +6,7 @@ import json
 import shutil
 from pathlib import Path
 
+from ..run_contract import is_plane_record, require_dataset
 from .audit_examples import verify_rgb_identity
 from .presets import CASES
 
@@ -74,20 +75,10 @@ def export_run(source, destination):
     summary = json.loads((source / "summary.json").read_text(encoding="utf-8"))
     config = json.loads((source / "config.json").read_text(encoding="utf-8"))
     count = len(config["trajectory"])
-    if summary["status"] != "passed" or len(summary["frames"]) != count:
-        raise ValueError("A complete successful run is required")
+    require_dataset(summary, config, f"{source.name}")
     paths = [Path(name) for name in FILES]
-    plane = (
-        config.get("config_kind") == "resolved_material_plane_run"
-        or config.get("indenter", {}).get("shape") == "plane"
-    )
+    plane = is_plane_record(config)
     if plane:
-        if not summary.get("production_mesh") or not summary.get(
-            "complete_recorded_interval"
-        ):
-            raise ValueError(
-                "Engineering pilot results cannot be exported as full examples"
-            )
         paths.extend(
             Path(name) for name in ("unloaded_reference.npz", "unloaded_reference.png")
         )
@@ -164,7 +155,7 @@ def export_run(source, destination):
     print(f"Exported {destination.name}: {count} frames, {len(paths)} checked files")
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--validation",
@@ -174,9 +165,10 @@ def main():
     )
     parser.add_argument("--output", type=Path, default=Path("docs/examples"))
     parser.add_argument("--case", choices=("all", *CASES), default="all")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     for key in exportable_cases(args.validation, args.case):
         export_case(args.validation, key, args.output)
+    return 0
 
 
 if __name__ == "__main__":

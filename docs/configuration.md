@@ -92,8 +92,12 @@ directory, summary = run(config, "outputs")
 ```
 
 `with_plane_options` applies only to slab geometry. Common rendering and solver
-methods operate directly on the resolved fields. The shape still determines the
-supported fixture, material laws, and loading protocol.
+methods validate their changes and keep plane settings consistent with the
+embedded setup. Source plane sensor, contact, and convergence settings belong
+in that setup; inconsistent copies in a resolved record are rejected. Solver
+allocation and a whole-number camera render scale may differ from the setup's
+defaults. The shape determines the supported fixture, material laws, and loading
+protocol.
 
 ## Reusable material cases
 
@@ -146,9 +150,14 @@ integer multiple of the solve interval. Protocol keyframes are included even
 when they fall between regular checkpoints. `solver.maximum_time_increment_s`
 is the separate limit on adaptive ANSYS substeps.
 
-For example, `sample_interval_s: 0.05` and `solve_interval_s: 0.01` retain 601
-mechanical checkpoints but save 121 frames over the six-second interval.
-Every converged internal state still receives the mechanical acceptance checks.
+Transient windows add their own sampling and checkpoint grids. With the shipped
+suite, `sample_interval_s: 0.05` and `solve_interval_s: 0.01` produce 290 saved
+frames and 812 mechanical checkpoints over six seconds. The window from 2.99 to
+5.1 s retains its 0.01 s frame interval and 0.005 s checkpoint interval; its
+maximum internal time increment is 0.0001 s. Without window refinement, the
+same base intervals would produce 121 frames and 601 checkpoints.
+Every converged recorded substep still receives the applicable
+[mechanical acceptance checks](dataset.md#metrics-and-acceptance).
 See [sampling CLI options](usage.md#mechanical-steps-and-saved-frames).
 
 ## Contact numerics
@@ -173,6 +182,29 @@ keys ending in `_note`. What each becomes in ANSYS:
 
 The same rule applies to `solver`: its keys are the `Solver` fields plus
 `maximum_time_increment_s`, which shapes the schedule, plus a free-text `note`.
+
+## One statement of each setting
+
+A resolved plane run carries the sensor, the contact definition and the solver
+in its common fields, and its setup states the same things. They are not two
+settings: the resolved fields are derived from the setup, and a run whose fields
+disagree with the setup it came from is rejected when it is validated. The one
+exception is where a run executes: `cores`, `gpu`, `require_gpu` and
+`allow_unlisted_gpu` are machine choices the setup does not state, and the
+camera may be a whole multiple of the setup's resolution, which is what
+`--render-scale` produces.
+
+This is why the setup declares `iterations: 150`. The resolved solver used to
+raise a declared 80 to 150 silently, so the number in the setup was not the
+number the solver received; the value that is used is now the value that is
+written down.
+
+A runtime override restates the setup it changes. `--force-tolerance` writes
+into both the resolved solver and `solver.force_tolerance`; a contact damping
+option writes into `contact_numerics.stabilization_damping`; a gel material
+override writes into `sensor.material`. Overriding a derived quantity is refused
+rather than accepted and ignored: marker pixel geometry follows the camera
+scale, and the plane gel mesh follows `discretization`.
 
 ## Control modes
 

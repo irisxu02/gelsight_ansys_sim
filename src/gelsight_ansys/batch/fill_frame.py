@@ -20,11 +20,8 @@ from ..contracts import SurfaceState
 from ..optics import Renderer
 from ..plane_coverage import ContactCoverage
 from ..plane_mechanics import AnsysPlane, gpu_statistics
-from ..plane_pipeline import (
-    completion_status,
-    render_plane_frame,
-    render_unloaded_reference,
-)
+from ..plane_pipeline import render_plane_frame, render_unloaded_reference
+from ..run_contract import completion_status
 from ..surface import Markers
 
 

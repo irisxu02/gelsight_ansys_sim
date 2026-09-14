@@ -82,11 +82,11 @@ cases also need the native adapter libraries. See
 |---|---|
 | [Rigid reference](../../configs/material_plane_slide/rigid_reference.json) | Smooth rigid plane with baseline friction |
 | [Soft rubber](../../configs/material_plane_slide/soft_rubber.json) | Nearly incompressible Neo-Hookean solid with relaxation |
-| [Compressible foam](../../configs/material_plane_slide/compressible_foam.json) | Ogden hyperfoam with proposed shear and bulk relaxation |
+| [Compressible foam](../../configs/material_plane_slide/compressible_foam.json) | Ogden hyperfoam with shear and bulk relaxation |
 | [Fluffy fabric](../../configs/material_plane_slide/fluffy_fabric.json) | Effective directional compaction, shear, and friction |
 | [Slippery surface](../../configs/material_plane_slide/slippery_surface.json) | Lower friction with reference geometry and bulk |
 | [Rough surface](../../configs/material_plane_slide/rough_surface.json) | Moving sinusoidal topography with reference friction |
-| [Sticky surface](../../configs/material_plane_slide/sticky_surface.json) | Proposed reversible attraction and adhesive shear resistance |
+| [Sticky surface](../../configs/material_plane_slide/sticky_surface.json) | Reversible attraction and adhesive shear resistance |
 
 Parameter values, physical meanings, expected signatures, and limitations are
 in [Plane material specifications](../materials-and-contact.md#plane-material-specifications).
@@ -99,9 +99,10 @@ not a preset: the rigid reference pressed to a commanded 5 N (0.030 mm
 travel-driven preload, then load control), held, slid 1 mm — accelerating into
 5 mm/s over 0.2 s, the slide integrated with mass at 0.1 ms from 50 ms in (its
 first 50 ms are pure stick and were solved quasi-statically at 2 ms) — and held
-to 4 s. Its resolved `config.json` ships inside the folder; the shipped presets
-run the same physics over a 10 mm slide, with mass integrated from 10 ms before
-the slide starts.
+to 4 s. Its resolved `config.json` and `summary.json` remain in the local full
+export; Git tracks only this diagnostic's preview, force plot, and animation.
+The shipped presets use a 10 mm slide, with mass integrated from 10 ms before
+the slide starts. They do not reproduce this diagnostic's exact schedule.
 
 | | |
 |---|---|
@@ -139,7 +140,7 @@ initialization states are excluded from its image frames.
 |---|---|---|---|
 | 0–2 s | Press | Ramp from 1 N to 5 N | 0 |
 | 2–3 s | Hold | 5 N | 0 |
-| 3–5.1 s | Slide | 5 N | Accelerate to 5 mm/s over 0.2 s, then 10 mm at 5 mm/s |
+| 3–5.1 s | Slide | 5 N | Accelerate to 5 mm/s over 0.2 s, then continue to 10 mm total travel |
 | 5.1–6 s | Hold | 5 N | 10 mm |
 
 There is no release or lift-off phase. Platen travel is an outcome, read back
@@ -170,7 +171,8 @@ coverage. It does not permit permanent bonding or automatic preload changes
 as substitutes. Full recorded coverage is checked before export.
 
 The suite defaults to a common uniform 36 × 30 × 8 gel mesh and a maximum
-physical time increment of 0.01 s. GPU work is verified when solver GPU use is requested. Its execution contract rejects
+physical time increment of 0.01 s outside the 0.0001 s inertia window.
+GPU work is verified when solver GPU use is requested. Its execution contract rejects
 unsupported material/formulation/GPU combinations. Specified outputs include
 RGB, material-marker motion, forces/torques, pressure, slip, coverage, and
 specimen deformation.
@@ -183,9 +185,9 @@ gel mesh; plane objects use independent simplified meshes. The queue
 exports a case only after its numerical and data-integrity checks pass.
 The seven plane cases use their own validation path and retain the 601-frame protocol.
 
-Each passed result is placed in `docs/examples/<config_name>/`, replacing its
+Each local export is placed in `docs/examples/<config_name>/`, replacing its
 previous generated dataset only after validation and checksum verification.
-Folders contain numeric data, raw images, four-panel and raw/subtracted GIFs,
+Local export folders contain numeric data, raw images, four-panel and raw/subtracted GIFs,
 configuration, metrics, and a SHA-256 manifest. Temporary solver files and logs
 stay under ignored `outputs/`. A preset file does not imply a completed solve.
 
@@ -220,4 +222,3 @@ presets remain version-controlled under `configs/`.
 A fresh clone contains the visual gallery. Run the commands above to generate
 the full dataset for analysis, replay, or the interactive report. Git LFS is not
 required. The exporter does not publish to a remote repository.
-

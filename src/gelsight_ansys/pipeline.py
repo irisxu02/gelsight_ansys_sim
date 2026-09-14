@@ -77,7 +77,11 @@ def run(
         "depth_semantics": "prescribed grip travel from first geometrical touch; deformation divides between object and sensor",
         "frames": [],
         "units": {"length": "m", "force": "N", "pressure": "Pa", "moment": "N m"},
-        "time_semantics": "quasi-static load parameter; no viscosity or inertia",
+        "time_semantics": (
+            "quasi-static load parameter; no viscosity or inertia. Sphere, flat "
+            "and imported-mesh runs step through their trajectory as load "
+            "parameters, not physical seconds."
+        ),
         "gpu_mechanics_requested": config.solver.gpu,
         "gpu_mechanics_verified": False,
     }

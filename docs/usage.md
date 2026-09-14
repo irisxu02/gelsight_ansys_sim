@@ -70,7 +70,7 @@ for the quaternion convention, boundary sets, and supported material/motion comb
 Runs save the same tactile images, marker motion, forces, and `process.gif` as
 other contact examples. Resolved configs embed the imported geometry so replay
 uses the saved mesh. The [detached queue](#detached-high-resolution-example-queue)
-includes the three supplied imported-object presets. A custom config can run
+includes the two supplied imported-object press presets. A custom config can run
 directly without registration; adding it to the curated queue requires its own
 validation/export entry.
 
@@ -91,8 +91,11 @@ limits those internal steps. A transient window (the slide, in the shipped
 presets) keeps its own sampling and solve intervals, so the command above
 records 290 frames over 812 checkpoints rather than 121: the press and holds
 are sampled at 0.05 s, the slide still at 0.01 s. Every converged substep still
-undergoes the contact coverage and force-balance checks, including states
-between saved frames. Saved images use solved states, with no interpolation of
+undergoes the contact coverage checks, including states between saved frames.
+Contact/backing force balance is required outside inertia windows; inside them
+the residual is recorded. Saved-frame pilot-load and raster checks remain active.
+See [acceptance rules](dataset.md#metrics-and-acceptance).
+Saved images use solved states, with no interpolation of
 deformation or forces. The saved-frame interval must be an integer multiple of
 the solve interval, and both must divide the span they apply to.
 
@@ -163,7 +166,7 @@ See [performance and limits](performance.md).
 
 The default configuration and all supplied presets use a uniform 36 × 30 × 8 mesh,
 with approximately 0.70 × 0.69 × 0.50 mm cells. Add `--refine-contact` to a new
-solve to use the locally refined mesh shown in the saved preview:
+general-contact solve to use the locally refined mesh shown in the saved preview:
 
 ```bash
 python scripts/run_simulation.py run --config configs/sphere_press.json --refine-contact
@@ -175,8 +178,10 @@ the configured gel dimensions and element counts. The nominal presets retain
 8,640 elements. Custom dimensions/counts must accommodate that refinement region;
 incompatible configurations are rejected before ANSYS starts.
 
-From Python, use `Config.load(path).with_contact_refinement()`. The effective
-mesh settings are saved in the run's `config.json`. Explicit mesh settings in a
+From Python, use `Config.load(path).with_contact_refinement()` for general contact.
+Plane runs select gel refinement through their setup's `discretization.gel_mesh`;
+see [plane mesh controls](plane-material-adapters.md#numerical-controls-and-resources).
+The effective mesh settings are saved in the run's `config.json`. Explicit mesh settings in a
 custom JSON are also respected without the flag. Refinement changes mechanics
 and therefore applies to `run`; `render` retains the mesh of the saved solve.
 The optical smoothing improvement is enabled for either mesh choice.

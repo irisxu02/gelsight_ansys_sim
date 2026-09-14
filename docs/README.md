@@ -12,7 +12,7 @@
    parameter overrides, and surface/contact properties; includes the
    [custom-mesh interface](configuration.md#custom-object-meshes).
 4. [Examples](examples/README.md): generated contact presets,
-   [custom-object pressing and sliding](examples/README.md#imported-object-examples),
+   [imported-object pressing](examples/README.md#imported-object-examples),
    material comparisons, and exported animations.
 
 ## Understand the model
@@ -21,7 +21,6 @@
 |---|---|
 | [Modeling](modeling.md) | Constitutive laws, geometry, boundary conditions, optics, and limitations |
 | [Materials and contact](materials-and-contact.md) | Uniform gel, coating simplification, friction, and plane material specifications |
-| [Material-property atlas](material-taxonomy/README.md) | Everyday materials, tactile-property taxonomy, image/marker observability, visual guides and proposed experiments |
 | [Sensor alignment](sensor-alignment.md) | Nominal camera, FOV, marker texture, and calibration requirements |
 
 ## Use the data and code

@@ -410,8 +410,9 @@ the one thing it exists to provide.
 
 **A velocity that ramps.** A prescribed motion that steps from rest to speed is
 an infinite acceleration once mass is present. The slide keyframes accelerate
-over 20 ms; at 5 mm/s against a 5 g specimen that costs about 1 mN of inertia,
-far below the 5 N contact load, and the slide still covers its declared distance.
+over 0.2 s; at 5 mm/s against a 5 g specimen the nominal acceleration contributes
+0.125 mN of inertia, far below the 5 N contact load. The slide still covers its
+declared distance.
 
 **A balance check that knows about mass.** Quasi-statically the contact force
 on the gel and the backing reaction cancel, and every recorded substep is held
@@ -431,10 +432,10 @@ on top of them.
 
 ### Reading the result
 
-The window is dynamic, and the shared suite declares inertial stick-slip out of
-its scope. A setup that opens one is studying that behaviour deliberately and
-should say so in its notes; the shipped `suite.json` opens one over the whole
-slide, because that is where the quasi-static path is lost.
+The window is dynamic. The shipped `suite.json` opens one over the whole slide
+because that is where the quasi-static path is lost, and its notes record that
+choice. Interpret the resulting motion with the declared mass, time increment,
+and damping; numerical completion does not establish a calibrated dynamic model.
 
 The measurement is the tangential-to-normal force ratio through the release: it
 should rise to the static coefficient as the interface breaks out and settle

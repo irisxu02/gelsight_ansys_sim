@@ -104,9 +104,16 @@ def validate_plane_resume(
     # still not free: saved frames were validated under the rules in force when
     # they were written, so a change is permitted only when asked for and is
     # recorded against the instant it took effect.
-    mechanical = ("protocol", "dataset", "contact_acceptance")
+    # The setup's solver block states the same convergence controls the resolved
+    # solver holds, so it is compared under the same rule rather than as part of
+    # the mechanical setup.
+    mechanical = ("protocol", "dataset", "contact_acceptance", "solver")
     if {k: v for k, v in sa.items() if k not in mechanical} != {
         k: v for k, v in sb.items() if k not in mechanical
+    }:
+        raise ValueError("Resume cannot change the mechanical setup")
+    if {k: v for k, v in sa["solver"].items() if k not in NUMERICS_ONLY} != {
+        k: v for k, v in sb["solver"].items() if k not in NUMERICS_ONLY
     }:
         raise ValueError("Resume cannot change the mechanical setup")
     acceptance = sa["contact_acceptance"] != sb["contact_acceptance"]

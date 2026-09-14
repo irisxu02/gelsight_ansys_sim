@@ -29,14 +29,15 @@ def freeze_mesh_inputs(source, snapshot):
     return frozen
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--snapshot", type=Path, required=True)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     print(
         f"Embedded mesh data in {len(freeze_mesh_inputs(args.source, args.snapshot))} snapshot configs"
     )
+    return 0
 
 
 if __name__ == "__main__":

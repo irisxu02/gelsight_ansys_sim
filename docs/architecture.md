@@ -2,7 +2,8 @@
 
 [Documentation](README.md) · [Modeling](modeling.md) · [Dataset](dataset.md)
 
-The implemented pipeline is an offline, displacement-driven sensor simulator.
+The implemented pipeline is an offline sensor simulator with prescribed-motion
+contact and a plane adapter that also supports prescribed normal load.
 PyMAPDL owns the finite-element solution; solver-independent arrays connect it
 to surface processing, markers, rendering, and dataset exports.
 
@@ -46,7 +47,10 @@ flowchart LR
 | `pipeline.py` | Geometry dispatch, sphere/flat stepping, restart and optical replay |
 | `batch/presets.py` | Shared curated preset catalog for validation, queue discovery, and export |
 | `run_services.py` | Shared run lifecycle, failure records, camera/background preparation, frame exports, and reports |
+| `run_contract.py` | Shared completion and dataset-acceptance rules used by validation, export, and audit |
 | `batch/` | Queue, integration validation, export, audit, and RGB comparison workflows; scripts are thin launchers |
+| `diagnostics/` | Licensed probes, material/contact coupons, solver monitoring, and benchmarks |
+| `native_build.py` | Build the Windows ANSYS material and contact libraries and record their hashes |
 | `cli.py` | Explicit `run` and `render` commands |
 
 Each run gets its own directory and MAPDL process. The session closes on success
@@ -81,15 +85,28 @@ a runtime proxy or a dummy trajectory. Earlier result snapshots are imported by
 only its own mesh. Their different loading loops share `RunLifecycle` and
 `process_frame`: process cleanup, failed-run diagnostics, GPU evidence checks,
 report generation, and optical exports follow the same contracts. Slab stepping
-still validates every converged physical-time substep, including preload history.
+retains every converged physical-time substep, including preload history, and
+applies the recording's coverage and force checks when recording begins.
 Its force fields retain the nominal camera grid while optical images use the
 requested render resolution; high-resolution optical geometry remains regenerable
 from saved surface states.
 
-Batch implementations import other package modules. The scripts in `scripts/`
-provide repository command entry points. Detached queues copy the package,
-launchers, and configs into their own source snapshot, so later repository edits
-do not change a running batch.
+Every command's implementation lives in the package, and every file in
+`scripts/` is a launcher: a docstring, an import, and `raise SystemExit(main())`.
+The dataset workflow is in `batch/` (run, validate, export, audit, queue); the
+licensed probes, coupons and benchmarks are in `diagnostics/`; readers for the
+solver's own files are modules of their own (`solver_monitor.py`,
+`contact_tracking.py`). Each `main` takes its arguments as a list, so a test can
+run a command without going through the process, which is what
+`tests/test_entry_points.py` does for every launcher. Detached queues copy the
+package, launchers, and configs into their own source snapshot, so later
+repository edits do not change a running batch.
+
+`run_contract.py` states, once, when a run is a finished dataset: the status it
+earns, and every reason it might fall short. The pipeline labels runs with it,
+the plane validator admits a pass with it, the exporter refuses incomplete runs
+with it, and the auditor re-checks exports with it, so those four commands
+cannot drift into different ideas of what passed.
 
 ## Custom-mesh extension points
 
@@ -135,9 +152,11 @@ assumptions; [the dataset reference](dataset.md) describes whole-body exports.
 
 ## Solver lifecycle and contact results
 
-The first frame is an explicitly identified, analytical unloaded reference with
-the indenter at its clearance height. Subsequent frames are converged nonlinear
-load steps. Automatic substeps resolve contact changes. After postprocessing,
+For sphere, flat-target, and imported-object runs, the first frame is an
+explicitly identified, analytical unloaded reference with the indenter at its
+clearance height. Plane runs save the unloaded reference separately, then solve
+preload before recording frame zero. Subsequent frames are converged nonlinear
+states. Automatic substeps resolve contact changes. After postprocessing,
 `ANTYPE,,REST` restores the previous converged state before advancing the next
 load step, preserving frictional history. The code verifies both result time and
 increasing load-step number. See [ANSYS multiframe restarts](https://ansyshelp.ansys.com/public/Views/Secured/corp/v252/en/ans_bas/Hlp_G_BAS3_12.html).
@@ -146,15 +165,21 @@ Contact pressure is the element-average `CONT,PRES` output. Element status uses
 `NMISC,41`: 0 far/open, 1 near/open, 2 sliding, 3 sticking. This is the maximum
 over integration points; point statuses are `NMISC,1` through `NMISC,4`. All four point statuses and
 elastic-slip distances are also saved. Penetration is
-`CONT,PENE`. Equivalent nodal contact loads are extracted with `FSUM,,CONT`
-restricted to contact elements and one surface node at a time. They are checked
-against backing and pilot reactions. See [CONTA174 outputs](https://ansyshelp.ansys.com/public/Views/Secured/corp/v252/en/ans_elem/Hlp_E_CONTA174.html)
+`CONT,PENE`. The general adapter extracts equivalent nodal contact loads with
+`FSUM,,CONT`, restricted to contact elements and one surface node at a time.
+The plane adapter reads contact element nodal loads from uncompressed result
+records and assembles them on the gel surface. Saved-frame checks compare them
+against backing and pilot loads, with the inertia and load-control conventions
+in the [dataset reference](dataset.md#metrics-and-acceptance).
+See [CONTA174 outputs](https://ansyshelp.ansys.com/public/Views/Secured/corp/v252/en/ans_elem/Hlp_E_CONTA174.html)
 and [FSUM](https://ansyshelp.ansys.com/public/Views/Secured/corp/v252/en/ans_cmd/Hlp_C_FSUM.html).
 
 For sphere/flat runs, time is a quasi-static loading parameter with no inertia
-or rate dependence. Plane protocols use physical seconds, retaining Prony and
-velocity-dependent contact history without inertia. Animation frame duration is for viewing and does not reproduce measured
-sensor acquisition timing.
+or rate dependence; imported-object runs use the same time convention. Plane
+protocols use physical seconds, retaining Prony and velocity-dependent contact
+history. Their `protocol.transient` windows can integrate mass; the shipped
+suite enables inertia during sliding. Animation frame duration is for viewing
+and does not reproduce measured sensor acquisition timing.
 
 The launcher disables PyMAPDL's default `set_no_abort` override. Every
 requested solve sets `NCNV,2` and checks the solution's `CNVG` flag,

@@ -5,8 +5,8 @@
 ## Sensor material
 
 Every preset uses a uniform, compressible Neo-Hookean gel with small-strain
-Young's modulus **100 kPa** and Poisson ratio **0.49**. The flat-twist example
-uses exactly the same gel law and constants as the sphere examples.
+Young's modulus **100 kPa** and Poisson ratio **0.49**. Sphere, imported-object,
+and plane presets share these gel constants.
 The pad is 25.25 × 20.75 × 4 mm; its backing is fixed and its sides are free.
 These dimensions and material constants are nominal, not a fit to a sensor.
 
@@ -18,8 +18,8 @@ approximation, not evidence that the coating has zero mechanical influence.
 
 | Component | Constitutive model | Small-strain E | Poisson ratio | Object/gel friction |
 |---|---|---:|---:|---:|
-| Gel, all six examples | Neo-Hookean | 100 kPa | 0.49 | — |
-| Sphere/flat rigid indenters | Rigid | — | — | 0.5 |
+| Gel, all curated presets | Neo-Hookean | 100 kPa | 0.49 | — |
+| Rigid sphere | Rigid | — | — | 0.5 |
 | Soft sphere | Neo-Hookean | 50 kPa | 0.45 | 0.5 |
 | Rough-slide sphere | Neo-Hookean | 2 MPa | 0.45 | 0.9 |
 
@@ -28,12 +28,13 @@ is a controlled simulation choice, not identification of a commercial silicone.
 The gel constants give shear modulus 33.557 kPa and bulk modulus 1.667 MPa.
 Neo-Hookean ANSYS input uses `mu = E/(2(1+nu))` and `D = 2/K`.
 Mooney–Rivlin and linear options remain available for explicit material studies;
-they are not used by the six shipped presets.
+the curated presets use the Neo-Hookean gel law.
 
 ## Friction and object compliance
 
-Contact uses CONTA174/TARGE170 with finite sliding, augmented-Lagrange normal
-contact, and Coulomb friction. Contact can stick, slide, and separate.
+The sphere and imported-object presets use CONTA174/TARGE170 with finite sliding,
+augmented-Lagrange normal contact, and Coulomb friction. Contact can stick,
+slide, and separate.
 `KEYOPT(18)=0` permits finite sliding and `KEYOPT(10)=2` updates contact stiffness
 on each iteration. Default FKN and FKT factors are 1, normal penetration
 tolerance is 1 µm, and tangential elastic-slip tolerance is 5 µm.
@@ -45,7 +46,8 @@ Rigid spheres have an analytic 3 mm radius surface. Deformable spheres have a
 conforming hexahedral mesh with 12 elements per cube axis, mapped into a sphere.
 Their upper cap (reference z at least 0.5 radius above the center) follows the
 prescribed translation. Contact uses the deformed, faceted object surface.
-The flat target is a rigid 6 × 4 mm rectangle.
+The general adapter also supports a configurable rigid rectangular flat target;
+there is no dedicated flat-target preset in the current catalog.
 
 Depth is prescribed object/grip travel from nominal first touch. A soft object
 absorbs some of that travel, so a 1 mm command is not 1 mm of gel indentation.
@@ -65,9 +67,10 @@ local `docs/examples/queue-status.json`. All parameter values remain
 synthetic and uncalibrated.
 
 Every case uses the same uniform sensor gel described above. Only specimen bulk
-behavior, surface geometry, and interface properties vary. The specimen is a
-60 × 35 × 3 mm slab with a nominally planar contacting face. Every case is
-pressed to the same commanded normal load, 5 N, and the platen travel that
+behavior, surface geometry, thickness, and interface properties vary. The specimen
+is a 60 × 35 mm slab with a nominally planar contacting face, 3 mm thick except
+for the 10 mm foam slab. Every case is pressed to the same commanded normal
+load, 5 N, and the platen travel that
 takes is recorded rather than set: it includes both specimen and gel
 compression, so the same load means a different indentation for each material,
 which is the comparison the suite exists to make. The complete geometry,
@@ -76,7 +79,7 @@ trajectory, contact requirements, and GPU policy are in
 
 ### Shared interface and relaxation
 
-The proposed interface uses finite sliding and allows local separation. Most
+The implemented interface uses finite sliding and allows local separation. Most
 cases share static friction coefficient **0.60**, limiting kinetic coefficient
 **0.45**, and decay speed **1 mm/s**:
 
@@ -88,19 +91,19 @@ Here `v` is local relative slip speed, which can differ from commanded platen
 speed while the gel and specimen deform. The kinetic coefficient is approached
 gradually; it is not an immediate switch at sliding onset. Friction belongs to
 the specimen–sensor surface pair. These settings differ from the constant
-coefficient used by the six runnable presets.
+coefficients used by the sphere and imported-object presets.
 [ANSYS velocity-dependent friction](https://ansyshelp.ansys.com/public/Views/Secured/corp/v252/en/ans_ctec/Hlp_ctec_realkey.html).
 
-The rubber and foam specifications include generalized Maxwell/Prony
-relaxation. The fabric specification includes relaxation parameters, but its
-constitutive implementation is incomplete. Each fraction is relative to
+Rubber, foam, and fabric include generalized Maxwell/Prony relaxation. Rubber
+and foam use native ANSYS hyperelastic laws; fabric combines a custom
+USERHYPERANISO energy with Prony branches. Each fraction is relative to
 instantaneous stiffness:
 
-| Case | Shear fractions at 0.2 s / 2 s | Bulk fractions at 0.2 s / 2 s | Intended long-term shear / bulk fraction |
+| Case | Shear fractions at 0.2 s / 2 s | Bulk fractions at 0.2 s / 2 s | Long-term shear / bulk fraction |
 |---|---|---|---|
 | Soft rubber | 0.10 / 0.15 | 0 / 0 | 0.75 / 1.00 |
 | Compressible foam | 0.20 / 0.25 | 0.15 / 0.15 | 0.55 / 0.70 |
-| Fluffy fabric, proposed relaxation targets | 0.20 / 0.25 | 0.15 / 0.15 | 0.55 / 0.70 |
+| Fluffy fabric | 0.20 / 0.25 | 0.15 / 0.15 | 0.55 / 0.70 |
 
 A relaxation time is the time constant of one decay contribution. These
 fractions describe material moduli; they do not predict an identical percentage
@@ -130,15 +133,16 @@ geometry and constraints.
 
 The material stores deformation while the Prony contributions permit
 time-dependent stress relaxation. Its long-term shear modulus approaches 75%
-of the instantaneous value; bulk stiffness does not relax. At the shared load
-some of the platen travel is absorbed by the specimen, so gel deformation is
-smaller than the rigid reference's and the recorded travel larger. The holds
-are intended to expose force and marker changes over time.
+of the instantaneous value; bulk stiffness does not relax. Under load control,
+platen travel includes specimen and gel compression. The resulting gel
+deformation depends on the coupled contact solution; equal normal load alone
+does not determine its difference from the rigid reference. The holds maintain
+the commanded load while travel, shear force, and marker motion can evolve.
 
 Friction and surface geometry match the rigid reference. The specified mixed
-u-P formulation has unverified GPU compatibility for this case. The execution
-contract rejects unsupported combinations without changing the material or
-element formulation.
+u-P formulation runs with CPU mechanics by default. Requested solver GPU use
+must produce activation and accelerated-work evidence; the execution contract
+rejects unsupported combinations without changing the material or formulation.
 
 ### Compressible foam
 
@@ -149,14 +153,15 @@ nonlinear response, and compressibility. Hyperfoam represents substantial
 volume change during compression.
 [ANSYS hyperfoam and hyperelastic models](https://ansyshelp.ansys.com/public/Views/Secured/corp/v252/en/ans_mat/aQw8sq22dldm.html).
 
-The proposed long-term shear and bulk stiffness fractions are 55% and 70%.
+The long-term shear and bulk stiffness fractions are 55% and 70%.
 Expected observables include specimen compression and volume change, force
 versus backing travel, and relaxation during holds. Its surface and friction
 match the rigid reference.
 
 This recoverable effective material does not resolve foam cells, permanent
-crushing, or air/fluid transport. The ANSYS coefficient mapping and
-hyperfoam/Prony compatibility are unverified implementation dependencies.
+crushing, or air/fluid transport. Native element coupons exercise the ANSYS
+hyperfoam/Prony implementation; see [validation scope](plane-material-adapters.md#data-integrity-and-validation).
+Those checks do not establish specimen calibration or a completed full slide.
 
 ### Fluffy fabric
 
@@ -191,10 +196,13 @@ outside the tabulated range is rejected. Directional friction and stiffness
 are intended to affect shear and marker motion.
 
 Individual hairs, strand bending/contact, and fiber impressions are not
-resolved; the contact face is a homogenized planar envelope. The full
-finite-strain constitutive law, coupling, and relaxation update are
-unimplemented. The compression table alone does not define a complete 3D
-material law. The x-only trajectory does not assess the y-direction response.
+resolved; the contact face is a homogenized planar envelope. The implemented
+finite-strain energy combines orthotropic coupling and shear terms with the
+integrated compression curve, and ANSYS supplies Prony relaxation. Its
+[native adapter](plane-material-adapters.md#mechanics-and-recording) requires
+the built libraries. Element coupons cover compression, relaxation, and all
+three shear planes; the x-only full-slide protocol does not assess directional
+sliding along y. The effective material remains uncalibrated.
 
 ### Slippery surface
 
@@ -215,8 +223,8 @@ keeps the reference's rigid bulk and friction and adds geometric texture:
 
 | Direction | Sinusoidal amplitude | Wavelength |
 |---|---:|---:|
-| x | 20 µm | 1.2 mm |
-| y | 10 µm | 1.0 mm |
+| x | 20 µm | 7.2 mm |
+| y | 10 µm | 6.0 mm |
 
 The two modes have zero phase, are summed in specimen material coordinates,
 and move with the specimen. First touch is referenced to the highest surface
@@ -225,10 +233,11 @@ impressions, and evolving marker motion during sliding.
 
 This deterministic height field is a synthetic texture; measured topography
 is needed to represent a particular specimen. The textured rigid target retains a 0.125 mm surface grid.
-All seven cases default to the standard uniform 36 × 30 × 8 gel. This coarse gel
-does not resolve eight elements per shortest texture wavelength; compare against
-the optional `discretization.gel_mesh: "refined"` setting before interpreting
-fine texture response quantitatively.
+All seven cases default to the standard uniform 36 × 30 × 8 gel. The current
+wavelengths span about 10 and 9 gel elements, respectively, meeting the declared
+minimum of eight. This resolves gentle waviness; finer texture needs a finer
+gel mesh. Compare against the optional `discretization.gel_mesh: "refined"`
+setting before interpreting texture response quantitatively.
 
 ANSYS supports arbitrary rigid target geometry using triangular or
 quadrilateral TARGE170 segments. This permits geometric texture in mechanical
@@ -238,7 +247,7 @@ contact. The plane adapter constructs this target and translates it with the spe
 ### Sticky surface
 
 [`sticky_surface.json`](../configs/material_plane_slide/sticky_surface.json)
-keeps the reference's rigid, smooth specimen and friction, and adds a proposed
+keeps the reference's rigid, smooth specimen and friction, and adds an implemented
 reversible adhesive interface:
 
 | Parameter | Value |
@@ -256,13 +265,17 @@ based on **repulsive** contact pressure with the attached fraction of the
 damage is excluded.
 
 The expected sliding signatures are increased shear resistance and altered
-marker drag. The interface law is a specification without a validated solver
-adapter. Ordinary bonded contact does not implement this law. The suite never
+marker drag. USERINTER implements the law, and native contact coupons cover
+opening, attraction, repulsion, sliding, separation, and reattachment. These
+checks are distinct from a completed material-comparison trajectory or
+experimental calibration. Ordinary bonded contact does not implement this law. The suite never
 releases the plane, so it cannot demonstrate pull-off strength or detachment.
 
 ### Scope and calibration data
 
-The expected signatures above have not been computed. Smooth surfaces in
+The [completed rigid 1 mm slide](examples/README.md#rigid-plane-1-mm-slide-at-5-n)
+provides one diagnostic result. It does not establish the expected differences
+across all seven materials over the shipped 10 mm protocol. Smooth surfaces in
 full-area contact may produce similar RGB images; force, marker displacement,
 and their time evolution can carry stronger differences. The sequence has no
 release, one slide direction, and one commanded slide speed, so it cannot
@@ -282,10 +295,11 @@ model parameter group:
 
 No specimen-specific calibration datasets are included.
 
-Densities are recorded for completeness. Inertia is disabled in this proposed
-quasi-static suite, so density alone does not create a material-specific
-inertial response. Numerical convergence, contact coverage, and experimental
-calibration remain separate requirements.
+Densities supply mass to the gel and deformable specimens. The shipped suite
+integrates inertia from 2.99 to 5.1 s with a maximum time increment of 0.1 ms;
+the rest of the protocol is quasi-static. See [transient controls](convergence.md).
+Numerical convergence, contact coverage, and experimental calibration remain
+separate requirements.
 
 ## Sensor calibration status
 
@@ -295,5 +309,5 @@ sliding and twisting measurements characterize the interface response.
 Separate coating properties and interfaces are outside the implemented model.
 
 The sphere presets remain rate-independent and quasi-static. The plane
-solver adds the stated relaxation and reversible adhesion models. Neither path
-includes coating damage, bulk plasticity, or inertia.
+solver adds the stated relaxation, reversible adhesion, and optional inertial
+windows. Neither path includes coating damage or bulk plasticity.

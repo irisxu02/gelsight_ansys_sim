@@ -141,8 +141,8 @@ The example queue uses `--render-scale 4`, preserves each
 preset's mesh, and exports only complete, validated runs. See the local `docs/examples/queue-status.json`
 and [detached queue instructions](usage.md#detached-high-resolution-example-queue).
 The seven plane-material cases use a separate solver and export path.
-Their much larger mesh and 601-frame recordings require separate resource and
-runtime measurements; sphere timings do not predict their cost. See
+Their specimen meshes, 601-frame recordings, and transient slide substeps need
+separate resource and runtime measurements; sphere timings do not predict their cost. See
 [plane implementation details](plane-material-adapters.md).
 
 ## Sampling and object resolution
@@ -151,7 +151,9 @@ Material comparisons support independent saved-frame and mechanical checkpoint
 intervals. `--sample-interval-s` controls image and dataset output;
 `--solve-interval-s` controls mechanical checkpoints, and
 `--maximum-time-increment-s` limits the solver's adaptive internal steps.
-Every converged substep retains contact-coverage and force-balance checks.
+Every converged recorded substep retains contact-coverage checks. Contact/backing
+force balance is required outside inertia windows and recorded inside them;
+saved-frame pilot-load and raster checks remain active.
 See [sampling controls](usage.md#mechanical-steps-and-saved-frames).
 
 `--object-element-size-m` changes deformable object resolution independently of

@@ -10,6 +10,7 @@ from PIL import Image
 
 from gelsight_ansys.config import Config
 from gelsight_ansys.metrics import validate_frame
+from gelsight_ansys.run_contract import require_dataset
 
 from .presets import CASES, preset_file
 
@@ -75,7 +76,7 @@ def audit(folder, preset=None, render_scale=1):
     summary = json.loads((folder / "summary.json").read_text())
     manifest = json.loads((folder / "manifest.json").read_text())
     count = len(config.trajectory)
-    assert summary["status"] == "passed" and len(summary["frames"]) == count
+    require_dataset(summary, config.to_dict(), folder.name)
     assert manifest["frame_count"] == count
     assert config.optics.render_mode == "raw"
     if config.solver.require_gpu:
@@ -120,8 +121,6 @@ def audit(folder, preset=None, render_scale=1):
             assert len(step) == 1 and metric["load_step"] == int(step[0]) + 1
         else:
             assert metric["load_step"] == i
-        if plane:
-            assert abs(metric["time_s"] - config.trajectory[i].time_s) < 1e-10
         with np.load(folder / "fields" / f"frame_{i:04d}.npz", allow_pickle=False) as f:
             assert len(f["marker_pixel"]) == np.prod(config.optics.marker_grid_rows_cols)
     if plane:
@@ -129,8 +128,6 @@ def audit(folder, preset=None, render_scale=1):
 
         checker = object.__new__(ContactCoverage)
         checker.rules = config.specification.suite["contact_acceptance"]
-        assert summary["production_mesh"] and summary["complete_recorded_interval"]
-        assert summary["initialization_substeps"] and summary["recorded_substeps"]
         for sample in summary["recorded_substeps"]:
             checker.validate(
                 sample["contact_coverage"],
@@ -186,7 +183,7 @@ def audit_catalog(examples, configs, render_scale=1, runs=()):
     return results
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--examples", type=Path, default=Path("docs/examples"))
     parser.add_argument("--configs", type=Path, default=Path("configs"))
@@ -199,7 +196,7 @@ def main():
         default=[],
         help="A curated export outside the preset catalog; audited without a preset comparison",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     results = audit_catalog(args.examples, args.configs, args.render_scale, args.run)
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(results, indent=2) + "\n")

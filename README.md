@@ -58,11 +58,11 @@ Solver GPU acceleration is available as an explicit option.
 ## Features
 
 - **General GelSight contact simulation:** pressing, sliding, and twisting with
-  finite-sliding friction. Included examples use rigid spheres, a rigid flat
-  target, and deformable spheres.
+  finite-sliding friction. Included generated-object presets use rigid and
+  deformable spheres; a configurable rigid flat target is also supported.
 - **[Custom object meshes](docs/configuration.md#custom-object-meshes):** import
   rigid STL/OBJ/JSON surfaces or deformable JSON hex volumes, then configure
-  material, friction, and motion. Includes press and slide examples.
+  material, friction, and motion. Includes rigid and deformable press examples.
 - **Material comparison:** finite slabs with rubber, compressible foam,
   effective fabric, and rigid reference surfaces; configurable relaxation,
   directional friction, roughness, and adhesion.
@@ -112,8 +112,8 @@ See [platform setup and troubleshooting](docs/getting-started.md).
 ### General GelSight contact simulation
 
 Select a contact preset with `--config`. This command uses sphere press as an
-example; the same workflow also runs the sliding, twisting, flat-target, and
-deformable-object presets listed below.
+example; the same workflow also runs the sliding, twisting, and
+deformable-object presets listed below, as well as custom flat-target configs.
 
 ```bash
 python scripts/run_simulation.py run --config configs/sphere_press.json

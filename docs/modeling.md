@@ -34,10 +34,17 @@ interface laws. They are outside the current gel model.
   formulation selected by configuration.
 - Silicone coating homogenized into the gel, with no separate mechanical layer.
 - Rigid analytic sphere of radius 3 mm, finite rectangular flat target, or a deformable sphere with a translating upper grip.
+- Imported rigid surfaces and deformable hex volumes, plus finite rigid or
+  deformable slabs through the plane adapter.
 - CONTA174/TARGE170 augmented-Lagrangian contact and Coulomb friction, initially
   `mu_friction = 0.5`.
 - Prescribed x/y translation, indentation, and rotation about the gel z-axis.
-  All remaining pilot-node degrees of freedom are constrained.
+  General-contact pilot degrees of freedom are constrained by the configured
+  pose; deformable sphere and imported-volume grips support translation.
+  Plane recording can instead apply a normal load to a platen free to move in z.
+
+The plane adapter adds velocity-dependent and custom directional/adhesive
+contact laws, as described in [plane materials](materials-and-contact.md#plane-material-specifications).
 
 See [materials and contact](materials-and-contact.md) for the coating simplification,
 object grip conditions, and numerical friction controls.
@@ -55,7 +62,8 @@ to retain the frictional tangent terms during stick/slip transitions. The
 statistics; see [NROPT](https://ansyshelp.ansys.com/public/Views/Secured/corp/v252/en/ans_cmd/Hlp_C_NROPT.html).
 
 The `linear` material option retains geometric nonlinearity and provides a
-constitutive comparison. The example presets use Neo-Hookean elasticity.
+constitutive comparison. All curated presets use Neo-Hookean gel elasticity;
+plane specimens can additionally use hyperfoam or effective fabric laws.
 
 ## Loading convention
 
@@ -67,7 +75,9 @@ sphere presets: no inertia and no rate-dependent material law.
 
 Plane setups may relax both. A material case can carry Prony relaxation, which
 makes time physical, and `protocol.transient` can switch inertia on across a
-named window. Both are opt-in and neither is used by the shipped sphere presets.
+named window. The shipped plane suite enables inertia during sliding, and the
+rubber, foam, and fabric cases enable relaxation. Neither is used by the shipped
+sphere or imported-object presets.
 See [convergence](convergence.md) for when a window is needed and how to size
 one.
 See [example trajectories](examples/README.md#trajectory-conventions) for
@@ -109,10 +119,12 @@ calibrate this sensor's geometry, silicone, lighting, or friction.
 
 ## Accuracy and validation limits
 
-The default configuration and all six presets use a uniform 36 × 30 × 8 mesh
+The default configuration and all curated presets use a uniform 36 × 30 × 8 gel mesh
 (8,640 elements), with approximately 0.70 × 0.69 × 0.50 mm cells.
 
-`--refine-contact` enables the optional mesh used in the saved loading preview.
+For general-contact runs, `--refine-contact` enables the optional mesh used in
+the saved loading preview. Plane gel refinement is selected through the setup's
+`discretization.gel_mesh`, as described in [plane mesh controls](plane-material-adapters.md#numerical-controls-and-resources).
 Within x = ±3.6 mm and y = ±3.0 mm, surface cells are 0.3 × 0.3 mm. This region
 covers the prescribed contact and sliding paths. Geometric transitions coarsen
 the outer gel, with adjacent in-plane cell-size ratios below 1.6.
@@ -135,11 +147,11 @@ smoothing cannot validate mechanical resolution.
 Mechanical calibration depends on measured force–depth and surface
 displacement data. Friction and optical calibration require separate interface
 and imaging measurements.
-The current implementation excludes general CAD indenters, tilt about x/y,
+The current implementation excludes direct CAD/B-rep import, tilt about x/y,
 coating damage, lens distortion, self-contact, and folded/overhanging surfaces.
-The gel itself stays elastic and rate-independent in every preset. Viscoelastic
-relaxation, adhesion and inertia exist only on the plane path, apply to the
-specimen and its interface rather than to the gel, and are each opt-in:
-`viscoelasticity` in a material case, `contact.adhesion` with a native adapter,
-and `protocol.transient` for a dynamic window. The renderer rejects reversed
+The gel's constitutive law stays elastic and rate-independent in every preset.
+On the plane path, `viscoelasticity` adds specimen relaxation and
+`contact.adhesion` adds an adhesive interface through a native adapter.
+`protocol.transient` can integrate the mass of the gel and deformable specimen;
+the shipped suite enables it during sliding. The renderer rejects reversed
 surface triangles instead of silently producing an invalid height image.

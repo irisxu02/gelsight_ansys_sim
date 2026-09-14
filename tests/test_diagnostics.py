@@ -12,10 +12,8 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import patch
 
-SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
-sys.path.insert(0, str(SCRIPTS))
-smoke = importlib.import_module("ansys_smoke_test")
-probe = importlib.import_module("ansys_license_probe")
+smoke = importlib.import_module("gelsight_ansys.diagnostics.smoke_test")
+probe = importlib.import_module("gelsight_ansys.diagnostics.license_probe")
 
 PRIVATE_MESSAGE = (
     r"sample_user@SAMPLE-HOST: denied by license-server.example.test; "

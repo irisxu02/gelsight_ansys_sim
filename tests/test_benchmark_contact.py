@@ -2,15 +2,13 @@
 
 import json
 import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from benchmark_contact import supervise
+from gelsight_ansys.diagnostics.contact_benchmark import supervise
 
 
 class ContactBenchmarkTests(unittest.TestCase):
@@ -32,8 +30,8 @@ class ContactBenchmarkTests(unittest.TestCase):
             child = Mock(returncode=0)
             child.wait.side_effect = subprocess.TimeoutExpired("diagnostic", 0.1)
             with (
-                patch("benchmark_contact.subprocess.Popen", return_value=child),
-                patch("benchmark_contact.stop_worker") as stop,
+                patch("gelsight_ansys.diagnostics.contact_benchmark.subprocess.Popen", return_value=child),
+                patch("gelsight_ansys.diagnostics.contact_benchmark.stop_worker") as stop,
             ):
                 supervise(args)
             records = json.loads((args.output / "benchmark.json").read_text())
@@ -58,7 +56,7 @@ class ContactBenchmarkTests(unittest.TestCase):
                 )
                 return Mock(returncode=1)
 
-            with patch("benchmark_contact.subprocess.Popen", side_effect=launch) as start:
+            with patch("gelsight_ansys.diagnostics.contact_benchmark.subprocess.Popen", side_effect=launch) as start:
                 self.assertEqual(supervise(args), 2)
             self.assertEqual(start.call_count, 1)
             records = json.loads((args.output / "benchmark.json").read_text())

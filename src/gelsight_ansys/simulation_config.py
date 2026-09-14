@@ -282,15 +282,44 @@ def resolve_plane(data, geometry, material, base_directory):
     return config_for_plane(PlaneCase(suite, case).validate())
 
 
-def plane_solver(specification, mode="cpu"):
-    """Resolve the solver allocation; the suite's convergence tolerances are kept.
+# Solver settings that say where a run executes rather than how it converges.
+# They are the only solver fields a resolved plane configuration may hold
+# differently from its suite.
+ALLOCATION_KEYS = frozenset({"cores", "gpu", "require_gpu", "allow_unlisted_gpu"})
 
-    Only the equilibrium-iteration ceiling is raised above the declared value, to
-    leave headroom for contact status changes. Tolerances are never tightened
-    here. A hidden 1e-4/L2 override used to replace the declared 0.005/L1, making
-    the criterion unreachable once a near-incompressible slab carried real load:
-    Newton then kept iterating past an already-converged state until contact
-    re-detection and the u-P volumetric constraint tore the specimen elements.
+# Optics fields that scale with the camera resolution. The suite declares them
+# for the nominal sensor; with_render_scale derives the resolved values.
+SCALE_KEYS = ("marker_margin_px", "marker_radius_px")
+
+# Contact settings: the resolved Indenter field for each suite contact_numerics
+# key. The suite is the source; the indenter is what the adapter reads.
+CONTACT_RULE_FIELDS = {
+    "normal_stiffness_factor": "stiffness_factor",
+    "tangential_stiffness_factor": "tangential_stiffness_factor",
+    "penetration_tolerance_m": "penetration_tolerance_m",
+    "elastic_slip_tolerance_m": "elastic_slip_tolerance_m",
+    "pinball_radius_m": "pinball_radius_m",
+    "formulation": "contact_formulation",
+    "separation": "contact_separation",
+    "update_stiffness_each_iteration": "update_stiffness_each_iteration",
+    "symmetric_pair": "symmetric_contact",
+}
+DAMPING_FIELDS = {
+    "normal_factor": "stabilization_damping_normal",
+    "tangential_factor": "stabilization_damping_tangential",
+    "activation": "stabilization_damping_activation",
+}
+
+
+def plane_solver(specification, mode="cpu"):
+    """Resolve the solver allocation; every convergence setting is the suite's.
+
+    Nothing here is overridden or tightened. A hidden 1e-4/L2 override used to
+    replace the declared 0.005/L1, making the criterion unreachable once a
+    near-incompressible slab carried real load: Newton then kept iterating past
+    an already-converged state until contact re-detection and the u-P volumetric
+    constraint tore the specimen elements. The iteration ceiling used to be
+    raised silently for the same reason; it is declared in the suite instead.
     """
     from dataclasses import fields
 
@@ -305,7 +334,6 @@ def plane_solver(specification, mode="cpu"):
         values.update(cores=4, gpu=False, require_gpu=False)
     elif mode != "specified":
         raise ConfigurationError("Plane solver mode must be cpu or specified")
-    values["iterations"] = max(150, values["iterations"])
     return Solver(**values)
 
 
@@ -341,6 +369,115 @@ def plane_contact_damping(rules):
     }
 
 
+def plane_indenter(specification):
+    """The contact definition the plane adapter reads, derived from the suite."""
+    rules = specification.suite["contact_numerics"]
+    slab = specification.suite["specimen"]
+    law = specification.case["contact"]["friction"]
+    return dict(
+        shape="plane",
+        half_width_m=slab["width_m"] / 2,
+        half_length_m=slab["length_m"] / 2,
+        clearance_m=0.0,
+        friction=law.get("x", law)["kinetic_coefficient"],
+        **{field: rules[key] for key, field in CONTACT_RULE_FIELDS.items() if key != "symmetric_pair"},
+        **plane_contact_damping(rules),
+        symmetric_contact=bool(rules.get("symmetric_pair", False)),
+        deformable=specification.bulk["model"] != "rigid",
+    )
+
+
+def contact_rules(indenter):
+    """The suite contact_numerics an Indenter corresponds to; the reverse map.
+
+    A runtime override of a contact setting is written back into the suite
+    through this, so the record a run keeps has one statement of each setting.
+    """
+    rules = {key: getattr(indenter, field) for key, field in CONTACT_RULE_FIELDS.items()}
+    # Written even when both factors are absent, so that switching damping off
+    # states it rather than falling back to a default nobody chose.
+    rules["stabilization_damping"] = {
+        key: getattr(indenter, field) for key, field in DAMPING_FIELDS.items()
+    }
+    return rules
+
+
+def suite_configuration(specification, scale=1):
+    """The common dataclasses a plane suite defines, at a camera scale.
+
+    Everything the adapter reads twice - the gel, its material, the camera and
+    optics, the contact definition, the solver - is derived here from the one
+    place that declares it. A resolved run holds the same values; that is what
+    plane_consistency_errors checks.
+    """
+    from .config import (
+        Camera,
+        Config,
+        Gel,
+        Indenter,
+        Material,
+        Optics,
+        Visualization,
+    )
+
+    sensor = specification.suite["sensor"]
+    scaled = Config(
+        camera=Camera(**sensor["camera"]), optics=Optics(**sensor["optics"])
+    ).with_render_scale(scale, validate=False)
+    return {
+        "sensor_model": sensor["sensor_model"],
+        "calibrated": sensor["calibrated"],
+        "gel": Gel(**sensor["gel"]),
+        "material": Material(**sensor["material"]),
+        "indenter": Indenter(**plane_indenter(specification)),
+        "solver": plane_solver(specification, "specified"),
+        "camera": scaled.camera,
+        "optics": scaled.optics,
+        "visualization": Visualization(**sensor["visualization"]),
+    }
+
+
+def plane_consistency_errors(config):
+    """Where a resolved plane configuration's common fields disagree with its suite.
+
+    The suite is the source of truth: the adapter reads the gel mesh, the
+    specimen, the contact table and the time schedule from it, and the common
+    fields from the resolved dataclasses. A field that could hold a different
+    value from the suite's would be accepted and, depending on which copy a
+    given command reads, ignored. Only the solver allocation and the camera
+    scale may differ, and the scale has to be a whole multiple.
+    """
+    import json
+    from dataclasses import asdict
+
+    nominal = config.specification.suite["sensor"]["camera"]
+    scale, remainder = divmod(config.camera.width_px, nominal["width_px"])
+    if (
+        remainder
+        or scale < 1
+        or config.camera.height_px != nominal["height_px"] * scale
+    ):
+        return [
+            "camera resolution is not a whole multiple of the suite's sensor camera"
+        ]
+    expected = suite_configuration(config.specification, scale)
+
+    def normalized(value):
+        return json.loads(json.dumps(asdict(value) if hasattr(value, "__dataclass_fields__") else value))
+
+    errors = []
+    for key, value in expected.items():
+        if key == "solver":
+            continue
+        if normalized(getattr(config, key)) != normalized(value):
+            errors.append(f"{key} differs from the suite's declaration")
+    mine, theirs = normalized(config.solver), normalized(expected["solver"])
+    for key in sorted(set(mine) - ALLOCATION_KEYS):
+        if mine[key] != theirs[key]:
+            errors.append(f"solver.{key} differs from the suite's solver block")
+    return errors
+
+
 def config_for_plane(
     specification,
     *,
@@ -357,9 +494,6 @@ def config_for_plane(
 
     if validate:
         specification.validate()
-    rules = specification.suite["contact_numerics"]
-    slab = specification.suite["specimen"]
-    law = specification.case["contact"]["friction"]
     trajectory = []
     for t in specification.frame_times:
         pose = specification.pose(t)
@@ -387,24 +521,7 @@ def config_for_plane(
             ),
             "solver": asdict(plane_solver(specification, solver_mode)),
             "trajectory": trajectory,
-            "indenter": dict(
-                shape="plane",
-                half_width_m=slab["width_m"] / 2,
-                half_length_m=slab["length_m"] / 2,
-                clearance_m=0.0,
-                friction=law.get("x", law)["kinetic_coefficient"],
-                stiffness_factor=rules["normal_stiffness_factor"],
-                tangential_stiffness_factor=rules["tangential_stiffness_factor"],
-                penetration_tolerance_m=rules["penetration_tolerance_m"],
-                elastic_slip_tolerance_m=rules["elastic_slip_tolerance_m"],
-                pinball_radius_m=rules["pinball_radius_m"],
-                contact_formulation=rules["formulation"],
-                contact_separation=rules["separation"],
-                update_stiffness_each_iteration=rules["update_stiffness_each_iteration"],
-                **plane_contact_damping(rules),
-                symmetric_contact=bool(rules.get("symmetric_pair", False)),
-                deformable=specification.bulk["model"] != "rigid",
-            ),
+            "indenter": plane_indenter(specification),
         },
         validate=validate,
     )

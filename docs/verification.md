@@ -31,7 +31,8 @@ python scripts/compare_examples.py
 python scripts/audit_examples.py
 ```
 
-Choose `--case press`, `slide`, `twist`, `soft`, or `rough` individually.
+Choose `--case press`, `slide`, `twist`, `soft`, `rough`, `imported_rigid`, or
+`imported_soft` individually.
 `formulations` explicitly compares displacement and mixed u-P on smaller models.
 For native Linux MAPDL, supply `--exec-file /usr/ansys_inc/v252/ansys/bin/ansys252`;
 licensed native Linux execution has not been verified.
@@ -48,23 +49,27 @@ and CUDA rendering. At 0.8 mm the force was 0.36087 N, with a 0.68% force-balanc
 residual. It does not validate a full release, sliding, or twisting cycle.
 [Preview and scope](rendering/README.md).
 
-Each run requires solver convergence and requested load-step history, force
+General-contact validation requires solver convergence and requested load-step history, force
 balance within 2%, conservative raster integration, zero released contact force
 within 1 µN, and gel recovery within 10 nm. Deformable objects must also deform,
 follow the grip motion, and recover. Sliding and twisting require nonzero shear
 and torque; sphere twist also checks marker circulation direction.
 
-Presets start with two internal substeps per load step. Automatic stepping can
+General-contact presets start with two internal substeps per load step. Automatic stepping can
 refine to the configured minimum increment (1/200 of the load step). These
 internal substeps are distinct from the saved trajectory frames.
 
-The solver uses the L1 force convergence norm (`solver.force_norm=1`),
+The shipped presets use the L1 force convergence norm (`solver.force_norm=1`),
 with tolerance 0.005. The sum of absolute residuals controls distributed residual
 forces more directly than L2; the separate 2% global balance check remains in
 place. This is a numerical criterion, not a material adjustment.
 [ANSYS CNVTOL](https://ansyshelp.ansys.com/public/Views/Secured/corp/v252/en/ans_cmd/Hlp_C_CNVTOL.html).
 
-Plane runs resolve this value from their setup rather than substituting one, and
+Plane runs have no release phase in the shipped protocol. They check coverage
+throughout recording and apply contact/backing balance outside inertia windows;
+saved-frame pilot-load and raster checks remain active inside those windows.
+See [plane acceptance](dataset.md#metrics-and-acceptance).
+Plane runs resolve convergence settings from their setup, and
 `--force-tolerance` / `--force-norm` vary it for a controlled sweep. Reading a
 stalled solve and choosing these controls is covered in
 [Convergence](convergence.md).
@@ -205,7 +210,7 @@ gel elements, standard surface-projection contact, and lower normal penalty
 stiffness. Each variant changes one numerical choice. The results include saved
 last states, forces, force-balance errors, timings, and failure logs; they are
 private diagnostic artifacts and cannot replace validated example exports.
-`--config` also accepts imported-object and flat-target presets; for those,
+`--config` also accepts imported-object presets and custom flat-target configs; for those,
 `--stop-time` selects the last trajectory pose to attempt. `--variants no_predictor
 unified` separately tests disabled displacement prediction and unified contact
 detection; `no_predictor` is refused for a plane preset, whose baseline already

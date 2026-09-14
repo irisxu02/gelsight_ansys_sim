@@ -130,7 +130,7 @@ def save_comparison_gif(panels, path, fps):
     save_gif(panels, path, fps)
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path, default=Path("docs/examples/sphere_press"))
     parser.add_argument("--output", type=Path, default=Path("docs/rendering"))
@@ -146,7 +146,7 @@ def main():
     parser.add_argument(
         "--backend", choices=("cpu", "cuda"), help="Optical replay backend"
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.render_scale < 1:
         parser.error("--render-scale must be positive")
     if not args.name or any(
@@ -194,6 +194,7 @@ def main():
     print(
         f"Saved {len(paths)} comparison frames at {size[0]} x {size[1]} to {args.output}"
     )
+    return 0
 
 
 if __name__ == "__main__":

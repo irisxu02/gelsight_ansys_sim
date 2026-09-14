@@ -4,8 +4,10 @@ The seven material comparison configs use the shared `run --config` entry point.
 Selecting `object.geometry.shape = "plane"` chooses the finite-slab ANSYS adapter
 and its physical-time recording and CUDA rendering path. They are experimental models. A successful run means that the prescribed
 trajectory and numerical acceptance checks completed; it does not establish
-material calibration or mesh convergence. See the live
-`docs/examples/queue-status.json` for completed datasets.
+material calibration or mesh convergence. Local queues write
+`docs/examples/queue-status.json` for dataset status; that generated file is
+excluded from Git. Published previews and their scope are in the
+[example gallery](examples/README.md).
 
 ```bash
 python scripts/run_simulation.py run --config configs/material_plane_slide/compressible_foam.json --render-scale 4
@@ -23,16 +25,23 @@ not a native-solver validation.
 
 ## Mechanics and recording
 
-All cases retain the uniform 100 kPa, ν=0.49 Neo-Hookean gel. The 
+All cases retain the uniform 100 kPa, ν=0.49 Neo-Hookean gel. The
 silicone coating remains mechanically homogenized into that gel. The finite
-60 × 35 × 3 mm specimen retains its prescribed top-face motion and free sides.
+60 × 35 mm specimen is 3 mm thick, except for the 10 mm foam slab. Its top face
+follows the platen and its sides are free. Initialization prescribes 0.030 mm
+normal travel; recording ramps normal load from 1 to 5 N, then holds 5 N during
+the holds and prescribed lateral slide. Normal platen travel is read from the
+solve under load control.
 Rubber, foam, and fabric deform; reference, slippery, rough, and sticky specimens
 are rigid. Roughness is explicit moving target geometry.
 
 The preload runs from physical time −2 to 0 s. Recording contains 601 frames
-from 0 to 6 s, with physical increments no larger than 0.01 s. Restart files
-retain the Prony and contact history across load steps. An unloaded state and
-image are stored separately: recorded frame 0 is already preloaded.
+from 0 to 6 s over 812 mechanical checkpoints. The maximum internal time
+increment is 0.01 s outside the 2.99–5.1 s transient window and 0.0001 s inside
+it. The window integrates mass and uses 0.005 s mechanical checkpoints;
+saved frames remain spaced at 0.01 s. The remaining protocol is quasi-static.
+Restart files retain Prony and contact history across load steps. An unloaded
+state and image are stored separately: recorded frame 0 is already preloaded.
 
 | Material/interface | ANSYS implementation |
 |---|---|
@@ -66,11 +75,12 @@ optics. `--solver-mode specified` preserves the suite's requested solver GPU
 allocation. GPU mechanics must be verified if requested; unsupported solver
 formulations are reported as failures.
 
-Plane runs tighten force convergence to 1e−4 with the L2 norm, allow at least
-150 Newton iterations, disable displacement prediction, and allow automatic
-bisection. These numerical overrides are recorded in the resolved config.
-Materials, friction coefficients, commanded travel, and acceptance thresholds
-are preserved.
+Plane runs take force convergence settings from the setup: the shipped values
+are tolerance 0.005, the L1 norm (`force_norm: 1`), and a ceiling of
+150 Newton iterations. They disable displacement prediction and allow automatic
+bisection. `--force-tolerance` and `--force-norm` support controlled overrides;
+resolved settings are recorded in `config.json`. Material parameters, prescribed
+loads/motion, and acceptance thresholds are preserved by these numerical options.
 
 The default gel is the standard uniform **36 × 30 × 8 mesh**: 10,323 nodes
 and 8,640 solid elements, using `sensor.gel.elements` from the setup.
@@ -84,11 +94,12 @@ Object simplification is enabled by default:
 | Object | Matched object mesh | Simplified object mesh |
 |---|---:|---:|
 | Smooth rigid plane | 135,161 target nodes; 134,400 facets | 4 target nodes; 1 exact planar facet |
-| Deformable slab | 1,621,932 nodes; 1,478,400 solid elements | 42,955 nodes; 33,600 solid elements |
+| 3 mm deformable slab | 1,621,932 nodes; 1,478,400 solid elements | 42,955 nodes; 33,600 solid elements |
 | Textured rigid plane | 135,161 nodes; 134,400 facets | Preserved to resolve the specified roughness |
 
 The deformable object uses 0.5 mm surface cells and graded thickness. This
-reduces its solid element count by 44×. Geometry, material laws, specimen
+reduces the 3 mm slab's solid element count by 44×; counts vary with specimen
+thickness and mesh overrides. Geometry, material laws, specimen
 thickness, and gel discretization are preserved. `--object-mesh matched`
 selects the matched object grid for comparisons. `--object-element-size-m`
 sets an independent deformable-object size, for example 0.00025 m for a finer
@@ -122,9 +133,12 @@ prescribed-gap coupon additionally passed opening, attractive traction, repulsiv
 superposition, sliding, separation, and reattachment checks. Changes to
 custom contact callbacks require rerunning the native contact tests.
 
-Every recorded substep must satisfy macroscopic contact coverage, specimen edge
-margin, and force balance. Recorded frames additionally check conservative
-surface-to-image force integration and preserve fixed material-marker identities.
+Every recorded substep must satisfy geometric coverage, specimen edge margin,
+and the protocol's required-contact conditions. Contact/backing force balance
+is required outside inertia windows; inside them the residual is recorded.
+Recorded frames additionally check pilot load and conservative surface-to-image
+force integration and preserve fixed material-marker identities. See the
+[dataset acceptance rules](dataset.md#metrics-and-acceptance).
 This is distinct from constitutive calibration and mesh convergence.
 
 Tactile PNGs and signed RGB differences are 1280 × 960 at render scale 4; physical
