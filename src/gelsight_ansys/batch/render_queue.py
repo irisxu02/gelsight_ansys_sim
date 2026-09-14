@@ -215,20 +215,31 @@ def earlier_runs(work, resume_from, name):
 
 
 def stop_owned(child):
-    """Stop a validation client and the solver it launched."""
+    """Stop a validation client and the solver it launched, whatever its state.
+
+    This runs while another exception is on its way out, so it must not raise
+    one of its own: psutil reports a process that has already exited with
+    NoSuchProcess, raised `from None`, which replaces the failure being
+    reported and suppresses it from the traceback. A solver abort was once
+    logged as a missing PID that way.
+    """
     import psutil
 
+    processes = []
     try:
         owned = psutil.Process(child.pid)
-    except psutil.NoSuchProcess:
-        return
-    processes = [owned, *owned.children(recursive=True)]
+        processes = [owned, *owned.children(recursive=True)]
+    except (psutil.Error, OSError):
+        processes = processes or []
     for process in processes:
         try:
             process.kill()
-        except psutil.NoSuchProcess:
+        except (psutil.Error, OSError):
             continue
-    psutil.wait_procs(processes, timeout=30)
+    try:
+        psutil.wait_procs(processes, timeout=30)
+    except (psutil.Error, OSError):
+        pass
 
 
 def run_validation(

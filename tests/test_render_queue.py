@@ -407,18 +407,56 @@ class PublishingSurvivesReadersTests(unittest.TestCase):
 
 
 class OrphanedSolverTests(unittest.TestCase):
+    def psutil_stub(self, **overrides):
+        stub = SimpleNamespace(
+            Error=RuntimeError,
+            NoSuchProcess=ProcessLookupError,
+            wait_procs=lambda processes, timeout: (processes, []),
+        )
+        for key, value in overrides.items():
+            setattr(stub, key, value)
+        return stub
+
     def test_a_failed_supervision_stops_the_job_it_was_watching(self):
         from gelsight_ansys.batch.render_queue import stop_owned
 
         child = SimpleNamespace(pid=4242)
         owned, descendant = Mock(), Mock()
         owned.children.return_value = [descendant]
-        fake = SimpleNamespace(
-            Process=lambda pid: owned,
-            NoSuchProcess=ProcessLookupError,
-            wait_procs=lambda processes, timeout: (processes, []),
-        )
+        fake = self.psutil_stub(Process=lambda pid: owned)
+        fake.NoSuchProcess = ProcessLookupError
         with patch.dict(sys.modules, {"psutil": fake}):
             stop_owned(child)
         owned.kill.assert_called_once()
         descendant.kill.assert_called_once()
+
+    def test_stopping_a_job_that_already_exited_reports_nothing(self):
+        """It runs while another failure is on its way out and must not replace it."""
+        from gelsight_ansys.batch.render_queue import stop_owned
+
+        class Gone(RuntimeError):
+            pass
+
+        child = SimpleNamespace(pid=4242)
+        # Gone before psutil is asked for it at all.
+        def missing(pid):
+            raise Gone("process PID not found")
+
+        with patch.dict(sys.modules, {"psutil": self.psutil_stub(Process=missing)}):
+            stop_owned(child)
+        # Gone between being found and being asked for its children, which is
+        # what a solver abort looks like from here.
+        owned = Mock()
+        owned.children.side_effect = Gone("process PID not found")
+        with patch.dict(
+            sys.modules, {"psutil": self.psutil_stub(Process=lambda pid: owned)}
+        ):
+            stop_owned(child)
+        # Gone between being listed and being killed.
+        owned = Mock()
+        owned.children.return_value = []
+        owned.kill.side_effect = Gone("process PID not found")
+        with patch.dict(
+            sys.modules, {"psutil": self.psutil_stub(Process=lambda pid: owned)}
+        ):
+            stop_owned(child)
