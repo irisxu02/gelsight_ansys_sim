@@ -168,18 +168,31 @@ def main():
         frames = replay_rgb(args.run, config, args.render_scale, args.backend)
     else:
         frames = saved_rgb(args.run, len(metrics))
-    panels = [
-        comparison_panel(raw, difference, metric, i, len(metrics), args.render_scale)
-        for i, (metric, (raw, difference)) in enumerate(zip(metrics, frames))
-    ]
     args.output.mkdir(parents=True, exist_ok=True)
     peak = max(range(len(metrics)), key=lambda i: metrics[i]["normal_force_n"])
-    panels[peak].save(args.output / f"{args.name}.png")
-    save_comparison_gif(
-        panels, args.output / f"{args.name}.gif", config_data["optics"]["animation_fps"]
-    )
+    # A 601-frame run at full resolution is gigabytes of panels; each is written
+    # to a file as it is made and the GIF writer reads them back one at a time.
+    with tempfile.TemporaryDirectory(prefix="gelsight-comparison-") as temporary:
+        from gelsight_ansys.artifacts import ImageFiles
+
+        paths, size = [], None
+        for i, (metric, (raw, difference)) in enumerate(zip(metrics, frames)):
+            panel = comparison_panel(
+                raw, difference, metric, i, len(metrics), args.render_scale
+            )
+            size = panel.size
+            path = Path(temporary) / f"frame_{i:04d}.png"
+            panel.save(path)
+            paths.append(path)
+            if i == peak:
+                panel.save(args.output / f"{args.name}.png")
+        save_comparison_gif(
+            ImageFiles(paths),
+            args.output / f"{args.name}.gif",
+            config_data["optics"]["animation_fps"],
+        )
     print(
-        f"Saved {len(panels)} comparison frames at {panels[0].width} x {panels[0].height} to {args.output}"
+        f"Saved {len(paths)} comparison frames at {size[0]} x {size[1]} to {args.output}"
     )
 
 

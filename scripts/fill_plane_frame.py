@@ -17,8 +17,16 @@ def main(argv=None):
         type=int,
         help="CONTA174 NMISC offset, ETYIQR(2,-110); needed for runs that did not record it",
     )
+    parser.add_argument(
+        "--refill",
+        type=int,
+        action="append",
+        default=[],
+        metavar="INDEX",
+        help="Render this frame again even though it is recorded (repeatable)",
+    )
     args = parser.parse_args(argv)
-    filled = fill_missing_frames(args.run, args.nonmisc_base)
+    filled = fill_missing_frames(args.run, args.nonmisc_base, refill=args.refill)
     print(f"{len(filled)} frame(s) filled; report rebuilt in {args.run}")
     return 0
 

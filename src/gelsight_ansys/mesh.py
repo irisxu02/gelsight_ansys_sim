@@ -69,11 +69,20 @@ def structured_mesh(gel):
     q = np.linspace(1.0, 0.0, nz + 1)
     bias = gel.through_thickness_bias
     q = np.expm1(bias * q) / np.expm1(bias) if bias else q
-    z = -gel.thickness_m * q
-    material_ids = np.ones(nx * ny * nz, dtype=int)
+    return tensor_mesh(x, y, -gel.thickness_m * q)
+
+
+def tensor_mesh(x, y, z):
+    """The hexahedral grid of three axes, its top face the contact surface.
+
+    Node numbering runs x fastest, then y, then z; the surface is the last z
+    layer and the bottom the first. Every structured body - the gel with its
+    biased or contact-graded axes, a plane specimen's slab with its graded
+    depth - is this one topology with different axes.
+    """
     zz, yy, xx = np.meshgrid(z, y, x, indexing="ij")
     coordinates = np.column_stack((xx.ravel(), yy.ravel(), zz.ravel()))
-    node = np.arange(len(coordinates)).reshape(nz + 1, ny + 1, nx + 1)
+    node = np.arange(len(coordinates)).reshape(len(z), len(y), len(x))
     hexes = np.stack(
         (
             node[:-1, :-1, :-1],
@@ -87,20 +96,18 @@ def structured_mesh(gel):
         ),
         axis=-1,
     ).reshape(-1, 8)
-    top = np.arange((nx + 1) * (ny + 1)).reshape(ny + 1, nx + 1)
+    top = np.arange(len(x) * len(y)).reshape(len(y), len(x))
     quads = np.stack(
         (top[:-1, :-1], top[:-1, 1:], top[1:, 1:], top[1:, :-1]), axis=-1
     ).reshape(-1, 4)
-    triangles = np.concatenate((quads[:, [0, 1, 2]], quads[:, [0, 2, 3]]))
-    surface_nodes = node[-1].ravel()
     return Mesh(
         coordinates,
         hexes,
-        surface_nodes,
+        node[-1].ravel(),
         quads,
-        triangles,
+        np.concatenate((quads[:, [0, 1, 2]], quads[:, [0, 2, 3]])),
         node[0].ravel(),
-        material_ids,
+        np.ones(len(hexes), dtype=int),
     )
 
 

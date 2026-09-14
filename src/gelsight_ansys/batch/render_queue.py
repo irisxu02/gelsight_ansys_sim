@@ -7,6 +7,7 @@ The Windows launcher starts an independent worker process.
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -124,6 +125,16 @@ def progress_frames(work, job):
             pass  # A solver process may be in the middle of writing its summary.
 
 
+def is_mapdl_process(name):
+    """Whether a process name is an MAPDL solver executable.
+
+    The solver is `ansys<version>` - `ansys252.exe` on Windows, `ansys252` on
+    Linux - and PyMAPDL may also start it as plain `ansys`. Ownership is decided
+    afterwards by the working directory, so the version is not pinned here.
+    """
+    return re.fullmatch(r"ansys\d*(\.exe)?", (name or "").lower()) is not None
+
+
 class SolverWatchdog:
     """Detect a vanished solver during a declared solve, scoped to this job."""
 
@@ -149,10 +160,7 @@ class SolverWatchdog:
         active = False
         for process in psutil.process_iter(["name", "cmdline"]):
             try:
-                if (process.info["name"] or "").lower() not in (
-                    "ansys.exe",
-                    "ansys252.exe",
-                ):
+                if not is_mapdl_process(process.info["name"]):
                     continue
                 # PyMAPDL launches with relative input/output filenames and sets
                 # cwd; the owned solver path need not appear in the command line.

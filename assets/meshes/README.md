@@ -6,6 +6,10 @@ with its base at source z=0. The pyramid has a 6 × 6 mm square base at z=3 mm
 and its tip at z=0. Configs declare millimeters explicitly.
 
 - `pyramid_surface.stl`: closed outward-oriented square pyramid, 6 triangles.
+  A standalone sample of a sharp feature; no shipped preset uses it, because
+  on the uniform gel mesh its tip is carried by one or two elements and a
+  slide is lost within the first millimetre. It needs a gel refinement
+  comparison before it can be more than an import example.
 - `block_surface.stl`: closed outward-oriented surface, 12 triangles.
 - `block_hex.json`: 48 eight-node hex elements, an outward bottom `contact` face
   set, and a top `grip` node set. These small meshes demonstrate importing and

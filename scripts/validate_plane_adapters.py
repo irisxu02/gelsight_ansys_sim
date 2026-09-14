@@ -18,8 +18,8 @@ from gelsight_ansys.ansys.materials import (
 )
 from gelsight_ansys.ansys.session import AnsysSession, validate_solve
 from gelsight_ansys.config import Config
+from gelsight_ansys.mesh import tensor_mesh
 from gelsight_ansys.plane_config import PlaneCase
-from gelsight_ansys.plane_mesh import tensor_hexes
 
 
 class Coupon(AnsysSession):
@@ -28,7 +28,7 @@ class Coupon(AnsysSession):
         super().__init__(
             replace(config, solver=replace(config.solver, force_tolerance=1e-7)),
             directory,
-            tensor_hexes(*([np.linspace(0, 0.001, 3)] * 3)),
+            tensor_mesh(*([np.linspace(0, 0.001, 3)] * 3)),
         )
         self.case = case
         self.libraries = Path(libraries).resolve()

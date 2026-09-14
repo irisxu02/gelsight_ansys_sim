@@ -19,3 +19,10 @@ PLANE_CASES = {
     "plane_fluffy_fabric_press_slide": "fluffy_fabric",
 }
 CASES = {**INDENTER_CASES, **{name: name for name in PLANE_CASES}}
+
+
+def preset_file(key):
+    """The preset's path under configs/ for a catalog key."""
+    if key in INDENTER_CASES:
+        return f"{INDENTER_CASES[key]}.json"
+    return f"material_plane_slide/{PLANE_CASES[key]}.json"

@@ -11,21 +11,67 @@ from PIL import Image
 from gelsight_ansys.config import Config
 from gelsight_ansys.metrics import validate_frame
 
+from .presets import CASES, preset_file
 
-def audit(folder, preset, render_scale=1):
+
+def reference_image(folder, plane):
+    """The image every difference field is measured against.
+
+    A plane run renders its unloaded gel before recording starts, so the
+    reference is a separate file; a sphere run's first frame is unloaded.
+    """
+    with Image.open(
+        folder / ("unloaded_reference.png" if plane else "images/frame_0000.png")
+    ) as image:
+        return np.asarray(image).astype(np.int16)
+
+
+def verify_rgb_identity(folder, count, plane):
+    """Every saved difference field is its frame's image minus the reference.
+
+    The identity is what makes the difference fields usable without the
+    renderer; a frame rendered outside the run and measured against the wrong
+    reference breaks it silently, so it is checked file by file.
+    """
+    folder = Path(folder)
+    reference = reference_image(folder, plane)
+    for i in range(count):
+        with Image.open(folder / "images" / f"frame_{i:04d}.png") as image:
+            raw = np.asarray(image).astype(np.int16)
+        with np.load(folder / "fields" / f"frame_{i:04d}.npz", allow_pickle=False) as f:
+            if not np.array_equal(f["rgb_difference_int16"], raw - reference):
+                raise ValueError(
+                    f"frame {i}: rgb_difference_int16 is not the image minus the "
+                    "unloaded reference"
+                )
+            np.testing.assert_allclose(
+                f["marker_flow_pixel"],
+                f["marker_pixel"] - f["marker_reference_pixel"],
+                atol=1e-13,
+            )
+
+
+def audit(folder, preset=None, render_scale=1):
+    """Check one exported run; against its current preset when it has one.
+
+    A curated run outside the preset catalog - a diagnostic that earned a place
+    among the examples - is audited the same way, minus the preset comparison.
+    """
+    folder = Path(folder)
     config = Config.load(folder / "config.json", validate=False)
     plane = config.is_plane
-    expected = Config.load(preset).with_render_scale(render_scale)
-    normalized = (
-        config
-        if plane
-        else config.with_solver(allow_unlisted_gpu=expected.solver.allow_unlisted_gpu)
-    )
-    # JSON snapshots use lists; scaled dataclass settings may still use tuples.
-    if json.loads(json.dumps(normalized.to_dict())) != json.loads(
-        json.dumps(expected.to_dict())
-    ):
-        raise ValueError(f"Export does not match current preset: {folder.name}")
+    if preset is not None:
+        expected = Config.load(preset).with_render_scale(render_scale)
+        normalized = (
+            config
+            if plane
+            else config.with_solver(allow_unlisted_gpu=expected.solver.allow_unlisted_gpu)
+        )
+        # JSON snapshots use lists; scaled dataclass settings may still use tuples.
+        if json.loads(json.dumps(normalized.to_dict())) != json.loads(
+            json.dumps(expected.to_dict())
+        ):
+            raise ValueError(f"Export does not match current preset: {folder.name}")
     summary = json.loads((folder / "summary.json").read_text())
     manifest = json.loads((folder / "manifest.json").read_text())
     count = len(config.trajectory)
@@ -46,10 +92,7 @@ def audit(folder, preset, render_scale=1):
                 hashlib.file_digest(stream, "sha256").hexdigest() == record["sha256"]
             ), relative
         assert p.stat().st_size == record["bytes"], relative
-    with Image.open(
-        folder / ("unloaded_reference.png" if plane else "images/frame_0000.png")
-    ) as image:
-        reference = np.asarray(image).astype(np.int16)
+    verify_rgb_identity(folder, count, plane)
     with np.load(folder / "solid_mesh.npz", allow_pickle=False) as mesh:
         if plane:
             from gelsight_ansys.plane_mesh import gel_mesh
@@ -79,15 +122,7 @@ def audit(folder, preset, render_scale=1):
             assert metric["load_step"] == i
         if plane:
             assert abs(metric["time_s"] - config.trajectory[i].time_s) < 1e-10
-        with Image.open(folder / "images" / f"frame_{i:04d}.png") as image:
-            raw = np.asarray(image).astype(np.int16)
         with np.load(folder / "fields" / f"frame_{i:04d}.npz", allow_pickle=False) as f:
-            np.testing.assert_array_equal(f["rgb_difference_int16"], raw - reference)
-            np.testing.assert_allclose(
-                f["marker_flow_pixel"],
-                f["marker_pixel"] - f["marker_reference_pixel"],
-                atol=1e-13,
-            )
             assert len(f["marker_pixel"]) == np.prod(config.optics.marker_grid_rows_cols)
     if plane:
         from gelsight_ansys.plane_coverage import ContactCoverage
@@ -125,11 +160,30 @@ def audit(folder, preset, render_scale=1):
         "frames": count,
         "verified_files": len(manifest["files"]),
         "raw_difference_identity": True,
-        "current_preset_match": True,
+        "current_preset_match": preset is not None,
         "gpu_mechanics_verified": summary["gpu_mechanics_verified"],
         "render_device": summary["render_device"],
         "projection_device": summary["projection_device"],
     }
+
+
+def audit_catalog(examples, configs, render_scale=1, runs=()):
+    """Audit every catalog preset that has an export, and any curated runs.
+
+    The catalog names each preset's file and its export folder, so plane
+    presets under their suite directory are found the same way as the sphere
+    presets. A preset with no export yet is reported, not treated as a failure.
+    """
+    results = {}
+    for key, name in CASES.items():
+        folder = examples / name
+        if not folder.is_dir():
+            results[name] = {"status": "missing", "reason": "no export"}
+            continue
+        results[name] = audit(folder, configs / preset_file(key), render_scale)
+    for folder in runs:
+        results[Path(folder).name] = audit(Path(folder), None, render_scale)
+    return results
 
 
 def main():
@@ -138,14 +192,19 @@ def main():
     parser.add_argument("--configs", type=Path, default=Path("configs"))
     parser.add_argument("--report", type=Path, default=Path("docs/example-audit.json"))
     parser.add_argument("--render-scale", type=int, default=1)
+    parser.add_argument(
+        "--run",
+        type=Path,
+        action="append",
+        default=[],
+        help="A curated export outside the preset catalog; audited without a preset comparison",
+    )
     args = parser.parse_args()
-    results = {
-        p.stem: audit(args.examples / p.stem, p, args.render_scale)
-        for p in sorted(args.configs.glob("*.json"))
-    }
+    results = audit_catalog(args.examples, args.configs, args.render_scale, args.run)
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(results, indent=2) + "\n")
     print(json.dumps(results, indent=2))
+    return 0
 
 
 if __name__ == "__main__":

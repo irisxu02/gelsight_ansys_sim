@@ -132,3 +132,40 @@ class PlaneMeshTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SharedTopologyTests(unittest.TestCase):
+    """The gel and the slab are one tensor-grid topology with different axes."""
+
+    def test_the_gel_grid_is_the_tensor_grid_of_its_axes(self):
+        from gelsight_ansys.mesh import tensor_mesh
+
+        gel = Gel(elements=(6, 5, 3), through_thickness_bias=1.5)
+        mesh = structured_mesh(gel)
+        x = np.unique(mesh.coordinates[:, 0])
+        y = np.unique(mesh.coordinates[:, 1])
+        z = np.unique(mesh.coordinates[:, 2])
+        same = tensor_mesh(x, y, z)
+        np.testing.assert_array_equal(mesh.coordinates, same.coordinates)
+        np.testing.assert_array_equal(mesh.hexes, same.hexes)
+        np.testing.assert_array_equal(mesh.surface_quads, same.surface_quads)
+        np.testing.assert_array_equal(mesh.surface_nodes, same.surface_nodes)
+        np.testing.assert_array_equal(mesh.bottom_nodes, same.bottom_nodes)
+        # x runs fastest, the surface is the last z layer, the bottom the first.
+        self.assertEqual(list(mesh.hexes[0]), [0, 1, 8, 7, 42, 43, 50, 49])
+        self.assertTrue(np.all(mesh.coordinates[mesh.surface_nodes, 2] == 0))
+        self.assertTrue(np.all(mesh.coordinates[mesh.bottom_nodes, 2] == z[0]))
+
+    def test_a_textured_surface_is_refused_on_a_deformable_slab(self):
+        """The slab is meshed flat, so accepting the texture would solve a smooth one."""
+        import copy
+
+        soft = Config.load(ROOT / "configs/material_plane_slide/soft_rubber.json")
+        rough = Config.load(ROOT / "configs/material_plane_slide/rough_surface.json")
+        textured = copy.deepcopy(soft)
+        textured.specification.case["surface_geometry"] = rough.specification.case[
+            "surface_geometry"
+        ]
+        with self.assertRaisesRegex(ValueError, "textured deformable slab"):
+            textured.validate()
+        rough.validate()

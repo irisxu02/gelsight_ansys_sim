@@ -9,12 +9,24 @@ import numpy as np
 from .ansys.contact import friction_commands
 from .ansys.materials import bulk_commands, material_commands
 from .ansys.session import AnsysSession, gpu_statistics, validate_solve
+from .ansys.solution import (
+    contact_keyopt_commands,
+    equation_solver_command,
+    solution_control_commands,
+)
 from .plane_mesh import gel_mesh, slab_mesh, textured_target
 
 
 class AnsysPlane(AnsysSession):
     def __init__(
-        self, config, directory, executable=None, libraries=None, *, restart=None
+        self,
+        config,
+        directory,
+        executable=None,
+        libraries=None,
+        *,
+        restart=None,
+        offline=False,
     ):
         self.case = config.specification
         super().__init__(
@@ -37,12 +49,16 @@ class AnsysPlane(AnsysSession):
         self.load_node = None
         self.symmetric_contact = config.indenter.symmetric_contact
         self.second_pair_start = None
-        needs_native = (
+        # A fabric, adhesive or orthotropic-friction interface is solved by the
+        # user-programmable adapters, and its result file carries their state
+        # variables; both the solver session and the result reader need to know.
+        self.needs_native = (
             self.case.bulk["model"] == "homogenized_orthotropic_fibrous_layer"
             or self.case.case["contact"]["adhesion"]["model"] != "none"
             or "x" in self.case.case["contact"]["friction"]
         )
-        if needs_native:
+        self.offline = offline
+        if self.needs_native and not offline:
             if libraries is None:
                 raise ValueError(
                     "This material requires native plane adapters; supply --libraries"
@@ -52,7 +68,68 @@ class AnsysPlane(AnsysSession):
             self.native_manifest = verify_libraries(libraries)
             self.extra_environment["ANS_USER_PATH"] = str(Path(libraries).resolve())
 
+    @classmethod
+    def offline_reader(cls, config, solver_directory, nonmisc_base):
+        """A model that reads a finished run's result file and never opens a solver.
+
+        The geometry is set up exactly as the run's was, from the same
+        configuration; the deck is composed and discarded. Native adapters are
+        not loaded - the result file already holds what they computed - and the
+        NMISC offset is the one the run recorded, since it is read from MAPDL at
+        build time and nowhere else.
+        """
+        model = cls(config, solver_directory, offline=True)
+        model.model_commands()
+        model.nonmisc_base = int(nonmisc_base)
+        # Solve timings belong to a solver session; a frame rendered offline has none.
+        model.last_timings = {}
+        return model
+
     def build(self):
+        cmds = self.model_commands()
+        if self.resume_point is not None:
+            self.restore_model()
+            return
+        # Write incrementally: a finely meshed slab can have over a million cells.
+        path = self.directory / "plane_model.inp"
+        with path.open("w", encoding="ascii") as stream:
+            for line in cmds:
+                stream.write(line + "\n")
+        del cmds
+        output = self.mapdl.input(str(path.resolve()))
+        (self.directory / "plane_model.log").write_text(str(output), encoding="utf-8")
+        if int(self.mapdl.get_value("NODE", 0, "COUNT")) != len(self.mesh.coordinates) + (
+            len(self.object_mesh.coordinates)
+            if self.object_mesh is not None
+            else len(self.target_reference) + 1
+        ):
+            raise RuntimeError("Plane model node import failed")
+        self.nonmisc_base = int(self.mapdl.parameters["PLANE_NMISC"])
+        self.save_geometry()
+
+    def save_geometry(self):
+        mesh, obj = self.mesh, self.object_mesh
+        geometry = {
+            "gel_reference_m": mesh.coordinates,
+            "gel_hexes": mesh.hexes,
+            "gel_material_ids": mesh.material_ids,
+            "surface_nodes": mesh.surface_nodes,
+        }
+        if obj is not None:
+            geometry.update(
+                indenter_reference_m=obj.coordinates,
+                indenter_hexes=obj.hexes,
+                indenter_surface_quads=obj.surface_quads,
+                indenter_grip_nodes=obj.grip_nodes,
+            )
+        else:
+            geometry.update(
+                target_reference_m=self.target_reference, target_quads=self.target_quads
+            )
+        np.savez_compressed(self.directory.parent / "solid_mesh.npz", **geometry)
+
+    def model_commands(self):
+        """Compose the model deck, setting up the geometry it describes."""
         c, mesh = self.config, self.mesh
         ns, nf = self.contact_start, len(mesh.surface_quads)
         clearance = c.indenter.clearance_m
@@ -200,11 +277,11 @@ class AnsysPlane(AnsysSession):
             "/SOLU",
             "ANTYPE,TRANS" if self.case.inertia_windows else "ANTYPE,STATIC",
             "NLGEOM,ON",
-            "EQSLV,SPARSE",
+            equation_solver_command(c.solver),
         ]
         if self.case.inertia_windows:
             cmds += ["TRNOPT,FULL"]
-        cmds += solution_control_commands(c.solver)
+        cmds += solution_control_commands(c.solver, predictor=False)
         cmds += self.time_integration_commands(None)
         cmds += [
             f"RESCONTROL,DEFINE,ALL,LAST,-1,,{self.retained_restart_points()}",
@@ -219,45 +296,10 @@ class AnsysPlane(AnsysSession):
             "KBC,0",
             "FINISH",
         ]
-        if self.extra_environment:
+        if self.needs_native:
             cmds.insert(-1, "USRCAL,USEROU")
         cmds.insert(-1, "PLANE_NMISC=ETYIQR(2,-110)")
-        if self.resume_point is not None:
-            self.restore_model()
-            return
-        # Write incrementally: a finely meshed slab can have over a million cells.
-        path = self.directory / "plane_model.inp"
-        with path.open("w", encoding="ascii") as stream:
-            for line in cmds:
-                stream.write(line + "\n")
-        del cmds
-        output = self.mapdl.input(str(path.resolve()))
-        (self.directory / "plane_model.log").write_text(str(output), encoding="utf-8")
-        if int(self.mapdl.get_value("NODE", 0, "COUNT")) != len(mesh.coordinates) + (
-            len(self.object_mesh.coordinates)
-            if self.object_mesh is not None
-            else len(self.target_reference) + 1
-        ):
-            raise RuntimeError("Plane model node import failed")
-        self.nonmisc_base = int(self.mapdl.parameters["PLANE_NMISC"])
-        geometry = {
-            "gel_reference_m": mesh.coordinates,
-            "gel_hexes": mesh.hexes,
-            "gel_material_ids": mesh.material_ids,
-            "surface_nodes": mesh.surface_nodes,
-        }
-        if self.object_mesh is not None:
-            geometry.update(
-                indenter_reference_m=obj.coordinates,
-                indenter_hexes=obj.hexes,
-                indenter_surface_quads=obj.surface_quads,
-                indenter_grip_nodes=obj.grip_nodes,
-            )
-        else:
-            geometry.update(
-                target_reference_m=self.target_reference, target_quads=self.target_quads
-            )
-        np.savez_compressed(self.directory.parent / "solid_mesh.npz", **geometry)
+        return cmds
 
     def restore_model(self):
         from .contracts import SurfaceState
@@ -294,7 +336,7 @@ class AnsysPlane(AnsysSession):
             self.directory / "gel.rst",
             self.contact_start + 1,
             len(self.mesh.surface_quads),
-            user_values_per_point=24 if self.extra_environment else 0,
+            user_values_per_point=24 if self.needs_native else 0,
             nonmisc_base=self.nonmisc_base,
         )
         index = reader.result.parse_step_substep([point.load_step, point.substep])
@@ -306,11 +348,17 @@ class AnsysPlane(AnsysSession):
         # A checkpoint resume may land exactly on a frame time whose frame was
         # never written; the pipeline renders it from this state.
         self.restored_state = (state, pose)
-        if point.replay_from_substep is None:
+        saved = SurfaceState.load(
+            self.directory.parent / "states" / f"frame_{point.frame_index:04d}.npz"
+        )
+        # Whether the restart point is the last saved frame is a question of
+        # identity - the same load step, substep and instant - not of whether
+        # anything remains to be replayed: a checkpoint whose substeps were all
+        # checked can still lie past the last frame that was written.
+        if (saved.load_step, saved.substep) == (point.load_step, point.substep) and np.isclose(
+            saved.time_s, point.time_s, rtol=0, atol=1e-10
+        ):
             # The point is a saved frame, so the result file must reproduce it.
-            saved = SurfaceState.load(
-                self.directory.parent / "states" / f"frame_{point.frame_index:04d}.npz"
-            )
             for key in (
                 "reference_m",
                 "displacement_m",
@@ -345,7 +393,7 @@ class AnsysPlane(AnsysSession):
             [
                 "FINISH",
                 "/SOLU",
-                *solution_control_commands(self.config.solver),
+                *solution_control_commands(self.config.solver, predictor=False),
                 *self.time_integration_commands(None),
                 "RESCONTROL,FILE_SUMMARY",
                 "FINISH",
@@ -435,7 +483,7 @@ class AnsysPlane(AnsysSession):
             self.directory / "gel.rst",
             self.contact_start + 1,
             len(self.mesh.surface_quads),
-            user_values_per_point=24 if self.extra_environment else 0,
+            user_values_per_point=24 if self.needs_native else 0,
             nonmisc_base=self.nonmisc_base,
         )
         for substep in range(first, last + 1):
@@ -703,25 +751,6 @@ def clearance(config):
     return config.indenter.clearance_m
 
 
-def contact_keyopt_commands(indenter, element_type):
-    """CONTA174 key options from the declared contact settings.
-
-    KEYOPT(4) detection at Gauss points, (11) shell thickness off and (18)
-    sliding behaviour are held at their defaults; the three that a setup can
-    reasonably need to change are read from it.
-    """
-    from .config import CONTACT_FORMULATIONS, CONTACT_SEPARATION
-
-    return [
-        f"KEYOPT,{element_type},2,{CONTACT_FORMULATIONS[indenter.contact_formulation]}",
-        f"KEYOPT,{element_type},4,0",
-        f"KEYOPT,{element_type},10,{2 if indenter.update_stiffness_each_iteration else 0}",
-        f"KEYOPT,{element_type},11,0",
-        f"KEYOPT,{element_type},12,{CONTACT_SEPARATION[indenter.contact_separation]}",
-        f"KEYOPT,{element_type},18,0",
-    ]
-
-
 def contact_real_commands(indenter, number):
     """One real constant set per contact pair; a symmetric definition needs two.
 
@@ -782,30 +811,3 @@ def restart_points(listing):
         elif fields[:2] == ["LOADSTEP", "SUBSTEP"]:
             expect_row = True
     return points
-
-
-def solution_control_commands(solver):
-    """Newton-Raphson controls that a restart must restate to take effect.
-
-    A resumed model is rebuilt from gel.rdb, which carries the settings written
-    when it was first built, so these are reissued rather than assumed.
-    """
-    commands = [
-        "NROPT,UNSYM" if solver.newton_raphson == "unsymmetric" else "NROPT,FULL",
-        "AUTOTS,ON",
-        "LNSRCH,ON",
-        "PRED,OFF",
-        f"NEQIT,{solver.iterations}",
-        f"CNVTOL,F,,{solver.force_tolerance:.16g},{solver.force_norm},1e-6",
-    ]
-    if solver.transient_points_per_cycle is not None:
-        commands.append(f"CUTCONTROL,NPOINT,{solver.transient_points_per_cycle}")
-    if not solver.predict_cutback:
-        commands.append("CUTCONTROL,NOITERPREDICT,1")
-    if solver.nonlinear_diagnostics:
-        # Identify the elements behind a distortion or penetration abort; the
-        # streamed solver text reports "Element 0" once numbers are stripped.
-        commands += ["NLDIAG,NRRE,ON", "NLDIAG,CONT,ITER"]
-    else:
-        commands += ["NLDIAG,NRRE,OFF", "NLDIAG,CONT,OFF"]
-    return commands

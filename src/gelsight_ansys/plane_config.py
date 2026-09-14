@@ -333,6 +333,14 @@ class PlaneCase:
             "homogenized_planar_pile_envelope",
         ):
             raise ValueError("Unsupported plane surface model")
+        if surface["model"] == "sinusoidal_height_field" and self.bulk["model"] != "rigid":
+            # Only the rigid target carries the height field; the deformable
+            # slab is meshed with a flat contact face, so accepting the texture
+            # here would silently solve a smooth specimen.
+            raise ValueError(
+                "A sinusoidal surface is only meshed on a rigid specimen; a "
+                "textured deformable slab is not implemented"
+            )
         friction = case["contact"]["friction"]
         expected_model = (
             "orthotropic_coulomb_exponential_velocity_decay"

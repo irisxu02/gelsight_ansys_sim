@@ -11,13 +11,14 @@ behaviour is tested rather than living in the script. Run any of them with
 | `run_simulation.py` | Run a configuration. The main entry point; also `--dry-run`. |
 | `resume_simulation.py` | Continue an interrupted run from its last saved frame. |
 | `validate_simulation.py` | Check a finished run against its declared contract. |
-| `validate_plane.py` | The same for a plane-contact run. |
+| `validate_plane.py` | Run a plane-contact preset as a licensed validation and record whether it passed. |
+| `fill_plane_frame.py` | Render a frame a plane run solved but never wrote, from its result file, and rebuild the report. |
 | `validate_plane_contact.py` | Contact acceptance on a finished plane run. |
 | `render_queue.py` | Discover the shipped presets and run them in order. |
 | `start_render_queue.ps1` | Windows launcher for it: snapshots the tree, then starts a detached worker that survives the shell. |
 | `export_examples.py` | Write the documentation examples from finished runs. |
-| `audit_examples.py` | Check exported examples for identifying or oversized content. |
-| `compare_examples.py` | Compare two exports frame by frame. |
+| `audit_examples.py` | Check every exported preset against its current preset, manifest hashes, and the RGB difference identity; `--run` audits a curated export outside the catalog. |
+| `compare_examples.py` | Plot the force and marker metrics of the four sphere examples against each other. |
 | `compare_rendering.py` | Compare optical backends on the same mechanical result. |
 
 ## Read a solve that is not converging

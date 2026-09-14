@@ -7,7 +7,12 @@ contact_simulation schema 3; all newly saved configs use resolved schema 4.
 from copy import deepcopy
 
 
-def read_saved_config(data):
+def read_saved_config(data, *, validate=True):
+    """Migrate an old record to the current schema.
+
+    With validate=False the record is read as what happened, not revalidated:
+    a rule added since it was written must not make it unreadable.
+    """
     from .config import Config
     from .plane_config import PlaneCase
     from .simulation_config import config_for_plane
@@ -20,10 +25,14 @@ def read_saved_config(data):
             object_mesh=run.get("object_mesh", "matched"),
             object_element_size_m=run.get("object_element_size_m"),
             solver_mode=run["solver_mode"],
+            validate=validate,
         )
-        config = config.with_solver(**run.get("solver_overrides", {}))
-        config = config.with_optics(**run.get("optics_overrides", {}))
-        return config.with_render_scale(run["render_scale"])
+        # Each builder revalidates, so a record is migrated field by field.
+        record = config.to_dict()
+        record["solver"].update(run.get("solver_overrides", {}))
+        record["optics"].update(run.get("optics_overrides", {}))
+        config = Config.from_dict(record, validate=validate)
+        return config.with_render_scale(run["render_scale"], validate=validate)
     if data.get("schema_version", 1) != 1:
         raise ValueError("Unsupported saved configuration schema")
     values = deepcopy(data)
@@ -41,4 +50,5 @@ def read_saved_config(data):
         values["indenter"].setdefault("elastic_slip_tolerance_m", None)
     if "optics" in values:
         values["optics"].setdefault("model", "analytic")
-    return Config.from_dict(values)
+    return Config.from_dict(values, validate=validate)
+

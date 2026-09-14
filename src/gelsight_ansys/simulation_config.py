@@ -348,13 +348,15 @@ def config_for_plane(
     object_mesh="simplified",
     object_element_size_m=None,
     solver_mode="cpu",
+    validate=True,
 ):
     """Build the common runtime directly from a validated slab experiment."""
     from dataclasses import asdict
 
     from .config import Config
 
-    specification.validate()
+    if validate:
+        specification.validate()
     rules = specification.suite["contact_numerics"]
     slab = specification.suite["specimen"]
     law = specification.case["contact"]["friction"]
@@ -403,5 +405,6 @@ def config_for_plane(
                 symmetric_contact=bool(rules.get("symmetric_pair", False)),
                 deformable=specification.bulk["model"] != "rigid",
             ),
-        }
+        },
+        validate=validate,
     )

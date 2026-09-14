@@ -133,6 +133,109 @@ class CheckpointResumeTests(unittest.TestCase):
         point = PlaneRestart(3, 7, 0, 0.04)
         self.assertEqual(list(AnsysPlane.replay_load_step(Mock(), point)), [])
 
+    def checkpoint_fixture(self, root, last_checked_substep):
+        """A run whose last frame is at 0 s and whose solver reached 0.04 s."""
+        config, model, state = PlaneRestartTests().fixture(root)
+        config = config.with_plane_sampling(sample_interval_s=0.1, solve_interval_s=0.02)
+        (root / "config.json").write_text(json.dumps(config.to_dict()))
+        (root / "solver/gel.mntr").write_text(MONITOR)
+        summary_path = root / "summary.json"
+        summary = json.loads(summary_path.read_text())
+        summary["recorded_substeps"] = [
+            {
+                "time_s": 0.04 if last_checked_substep == 7 else 0.03,
+                "load_step": 3,
+                "substep": last_checked_substep,
+                "normal_force_n": 1.0,
+            }
+        ]
+        summary_path.write_text(json.dumps(summary))
+        return config, model, state
+
+    def test_solved_history_is_compared_through_the_checkpoint_not_the_last_frame(self):
+        """The result file holds the loading up to the checkpoint; none of it may change."""
+        for last_checked in (4, 7):
+            with tempfile.TemporaryDirectory() as tmp, self.subTest(last_checked=last_checked):
+                root = Path(tmp)
+                config, _, _ = self.checkpoint_fixture(root, last_checked)
+                changed = deepcopy(config)
+                # The next keyframe after the last frame, before the checkpoint.
+                changed.specification.suite["protocol"]["keyframes"][1]["normal_force_n"] = 4.0
+                changed = changed.with_plane_sampling()
+                self.assertNotEqual(
+                    config.physical_pose(0.04).normal_force_n,
+                    changed.physical_pose(0.04).normal_force_n,
+                )
+                # Judged against the last frame alone, the change is invisible.
+                self.assertEqual(config.physical_pose(0.0), changed.physical_pose(0.0))
+                with self.assertRaisesRegex(ValueError, "solved motion history"):
+                    validate_plane_resume(root, changed, from_checkpoint=True)
+                validate_plane_resume(root, config, from_checkpoint=True)
+
+    def test_a_transient_window_that_shaped_solved_substeps_cannot_change(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config, _, _ = self.checkpoint_fixture(root, 7)
+            changed = deepcopy(config)
+            protocol = changed.specification.suite["protocol"]
+            protocol["transient"]["windows"].insert(
+                0,
+                {
+                    "start_time_s": 0.02,
+                    "end_time_s": 0.1,
+                    "time_increment_s": 0.01,
+                    "inertia": True,
+                },
+            )
+            changed = changed.with_plane_sampling()
+            with self.assertRaisesRegex(ValueError, "time integration of solved history"):
+                validate_plane_resume(root, changed, from_checkpoint=True)
+            # A window entirely after the checkpoint is a future decision.
+            later = deepcopy(changed)
+            later.specification.suite["protocol"]["transient"]["windows"][0].update(
+                start_time_s=0.06, end_time_s=0.1
+            )
+            later = later.with_plane_sampling()
+            validate_plane_resume(root, later, from_checkpoint=True)
+
+    def test_a_fully_checked_checkpoint_past_the_last_frame_is_not_compared_to_it(self):
+        """Identity, not replay work, decides whether the point is a saved frame."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config, model, state = self.checkpoint_fixture(root, 7)
+            point, _ = validate_plane_resume(root, config, from_checkpoint=True)
+            self.assertIsNone(point.replay_from_substep)
+            self.assertEqual((point.load_step, point.substep), (3, 7))
+            self.assertEqual(point.frame_index, 0)
+            np.savez(
+                root / "solid_mesh.npz",
+                gel_reference_m=model.mesh.coordinates,
+                gel_hexes=model.mesh.hexes,
+            )
+            model.resume_point = point
+            model.mapdl = Mock()
+            model.mapdl.get_value.return_value = point.time_s + model.time_offset
+            model.mapdl.parameters = {"PLANE_NMISC": 197}
+            model.command_block = Mock(return_value=FILE_SUMMARY.replace("178      107", "  3        7"))
+            later = deepcopy(state)
+            later.displacement_m[:, 2] = -1e-5
+            model.extract_saved_result = Mock(return_value=later)
+            model.achieved_travel = Mock(return_value=1e-5)
+            with patch("gelsight_ansys.rst_contact.ContactResult", return_value=Mock()):
+                model.restore_model()
+            restored, _, _ = model.restored()
+            self.assertEqual((restored.load_step, restored.substep), (3, 7))
+            # The same point named as the saved frame itself is checked against it.
+            frame_point = replace(point, load_step=1, substep=100, time_s=0.0)
+            model.resume_point = frame_point
+            model.mapdl.get_value.return_value = model.time_offset
+            model.command_block = Mock(return_value=FILE_SUMMARY.replace("178      107", "  1      100"))
+            with (
+                patch("gelsight_ansys.rst_contact.ContactResult", return_value=Mock()),
+                self.assertRaises(AssertionError),
+            ):
+                model.restore_model()
+
 
 class ResumeCopyTests(unittest.TestCase):
     def test_the_solver_lock_of_an_interrupted_run_is_not_carried_over(self):
@@ -628,3 +731,116 @@ class FillFrameTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FillFrameRenderingTests(unittest.TestCase):
+    """A frame rendered after the run is measured against the run's reference."""
+
+    def fill(self, root, summary_update, status_only=False):
+        from gelsight_ansys.batch import fill_frame
+
+        config, model, state = PlaneRestartTests().fixture(root)
+        config = config.with_optics(backend="cpu")
+        (root / "config.json").write_text(json.dumps(config.to_dict()))
+        summary_path = root / "summary.json"
+        summary = json.loads(summary_path.read_text())
+        summary["recorded_substeps"] = [
+            {"time_s": 0.0, "load_step": 1, "substep": 100, "normal_force_n": 1.0},
+            {"time_s": 0.01, "load_step": 2, "substep": 5, "normal_force_n": 1.1},
+        ]
+        summary["mesh"] = {"contact_nonmisc_base": 197}
+        summary.update(summary_update)
+        summary_path.write_text(json.dumps(summary))
+        captured = {}
+
+        def render(directory, index, config, state, pose, model, markers, renderer, *rest):
+            captured["reference"] = renderer.reference_rgb.copy()
+            captured["index"] = index
+            return {"time_s": pose.time_s, "load_step": state.load_step, "substep": state.substep}
+
+        solved = deepcopy(state)
+        solved.load_step, solved.substep = 2, 5
+        reader = Mock()
+        reader.converged_states = Mock(
+            return_value=iter([(solved, config.physical_pose(0.01), {"active": False})])
+        )
+        reader.contact_details, reader.object_mesh, reader.object_displacement = {}, None, None
+        coverage = Mock()
+        coverage.evaluate.return_value = ({}, None)
+        with (
+            patch.object(fill_frame, "render_plane_frame", render),
+            patch.object(fill_frame, "offline_model", return_value=reader),
+            patch.object(fill_frame, "ContactCoverage", return_value=coverage),
+            patch.object(fill_frame, "build_report"),
+        ):
+            filled = fill_frame.fill_missing_frames(root, progress=lambda _: None)
+        return config, captured, filled, json.loads(summary_path.read_text())
+
+    def test_the_unloaded_gel_is_rendered_before_the_filled_frame(self):
+        from gelsight_ansys.contracts import SurfaceState
+        from gelsight_ansys.optics import Renderer
+        from gelsight_ansys.plane_pipeline import render_unloaded_reference
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config, captured, filled, summary = self.fill(root, {})
+            self.assertEqual([f["index"] for f in filled], [1])
+            self.assertEqual(captured["index"], 1)
+            reference = SurfaceState.load(root / "unloaded_reference.npz")
+            expected = render_unloaded_reference(reference, config, Renderer(config, root))
+            np.testing.assert_array_equal(captured["reference"], expected)
+            self.assertEqual([f["time_s"] for f in summary["frames"]], [0.0, 0.01])
+
+    def test_only_a_report_failure_is_promoted_and_by_the_normal_policy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            # A run that stopped solving keeps its failure whatever gets filled.
+            *_, summary = self.fill(
+                root,
+                {
+                    "status": "failed",
+                    "error_type": "RuntimeError",
+                    "phase": "solving",
+                    "production_mesh": False,
+                    "diagnostic_run": True,
+                },
+            )
+            self.assertEqual(summary["status"], "failed")
+            self.assertEqual(summary["error_type"], "RuntimeError")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            # A report failure on an incomplete diagnostic pilot: the report is
+            # rebuilt, and the run is what it always was, not a passed dataset.
+            *_, summary = self.fill(
+                root,
+                {
+                    "status": "failed",
+                    "error_type": "FileNotFoundError",
+                    "phase": "report",
+                    "production_mesh": False,
+                    "diagnostic_run": True,
+                },
+            )
+            self.assertEqual(summary["status"], "diagnostic_passed")
+            self.assertFalse(summary["complete_recorded_interval"])
+            self.assertNotIn("error_type", summary)
+
+
+class LegacyRecordTests(unittest.TestCase):
+    def test_reading_an_old_record_without_validation_reaches_the_migration(self):
+        legacy = Config().to_dict()
+        legacy["schema_version"] = 1
+        legacy["name"] = "old record name"
+        with self.assertRaises(ValueError):
+            Config.from_dict(legacy)
+        self.assertEqual(Config.from_dict(legacy, validate=False).name, "old record name")
+
+
+class RefillTests(unittest.TestCase):
+    def test_a_refilled_frame_is_found_missing_and_rendered_again(self):
+        from gelsight_ansys.batch.fill_frame import missing_frame_indices
+
+        frames = [{"time_s": 0.0}, {"time_s": 0.01}]
+        self.assertEqual(missing_frame_indices(frames, np.array([0.0, 0.01]), 0.01), [])
+        kept = [f for f in frames if abs(f["time_s"] - 0.01) > 1e-9]
+        self.assertEqual(missing_frame_indices(kept, np.array([0.0, 0.01]), 0.01), [1])

@@ -9,20 +9,22 @@ NMISC offset the run recorded (or was given).
 """
 
 import json
-import tempfile
 from dataclasses import replace
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import numpy as np
 
 from ..artifacts import build_report, write_json
 from ..config import Config
 from ..contracts import SurfaceState
+from ..optics import Renderer
 from ..plane_coverage import ContactCoverage
 from ..plane_mechanics import AnsysPlane, gpu_statistics
-from ..plane_pipeline import render_plane_frame
-from ..run_services import prepare_optics
+from ..plane_pipeline import (
+    completion_status,
+    render_plane_frame,
+    render_unloaded_reference,
+)
 from ..surface import Markers
 
 
@@ -63,27 +65,39 @@ def insert_frame(frames, metric):
 
 def offline_model(config, solver_directory, nonmisc_base):
     """A plane model that reads the result file but never talks to a solver."""
-    with tempfile.TemporaryDirectory() as scratch:
-        model = AnsysPlane(config, Path(scratch) / "solver")
-        model.mapdl = MagicMock()
-        model.mapdl.get_value.return_value = 0
-        try:
-            model.build()  # writes the deck it would send, and sets the model up
-        except RuntimeError as error:
-            if "node import failed" not in str(error):
-                raise
-    model.directory = Path(solver_directory)
-    model.nonmisc_base = nonmisc_base
-    # Solve timings belong to a solver session; a filled frame has none.
-    model.last_timings = {}
-    return model
+    return AnsysPlane.offline_reader(config, Path(solver_directory), nonmisc_base)
 
 
-def fill_missing_frames(directory, nonmisc_base=None, progress=print):
+def failed_in_report(summary):
+    """Whether the run's only failure was writing its report.
+
+    The lifecycle records the phase a failure happened in. A run that solved
+    and checked every frame but could not build its report - a hole in the
+    frame sequence - is complete once the hole is filled; a run that failed
+    anywhere else is not, and keeps its failure.
+    """
+    return summary.get("status") == "failed" and summary.get("phase") == "report"
+
+
+def fill_missing_frames(directory, nonmisc_base=None, progress=print, *, refill=()):
+    """Render the frames the run solved but has no record of, and rebuild.
+
+    `refill` names frames to render again: their records are dropped first, so
+    they are found missing and rendered by the same path. It is for a frame an
+    earlier fill wrote wrongly - one measured against the wrong reference.
+    """
     directory = Path(directory)
     config = Config.load(directory / "config.json", validate=False)
     case = config.specification
     summary = json.loads((directory / "summary.json").read_text())
+    if refill:
+        again = {float(case.frame_times[i]) for i in refill}
+        summary["frames"] = [
+            f for f in summary["frames"] if not any(abs(f["time_s"] - t) < 1e-9 for t in again)
+        ]
+        summary["filled_frames"] = [
+            f for f in summary.get("filled_frames", []) if f["index"] not in set(refill)
+        ]
     recorded = summary.get("recorded_substeps", [])
     if not recorded:
         raise ValueError("The run recorded no converged substeps")
@@ -94,15 +108,22 @@ def fill_missing_frames(directory, nonmisc_base=None, progress=print):
             "The run did not record its contact NMISC offset; pass --nonmisc-base "
             "(ETYIQR(2,-110) for the run's CONTA174 definition)"
         )
+    # A run from before the offset was recorded keeps it from now on.
+    summary.setdefault("mesh", {})["contact_nonmisc_base"] = int(nonmisc_base)
+    report_failure = failed_in_report(summary)
     times = case.frame_times
     missing = missing_frame_indices(summary["frames"], times, recorded[-1]["time_s"])
     if not missing:
         progress("No frames are missing")
-    config, renderer = prepare_optics(config, directory, None)
+    # The run's saved optical assets - a background image among them - are
+    # resolved against its directory, and a fresh renderer has to measure every
+    # difference field against the same unloaded rendering the run did.
+    renderer = Renderer(config, directory)
     reference = SurfaceState.load(directory / "unloaded_reference.npz")
     markers = Markers(
         reference, config.optics.marker_spacing_m, config.camera, config.optics
     )
+    render_unloaded_reference(reference, config, renderer, markers)
     coverage = ContactCoverage(case, reference.reference_m, reference.quads)
     model = offline_model(config, directory / "solver", int(nonmisc_base))
     filled = []
@@ -129,11 +150,16 @@ def fill_missing_frames(directory, nonmisc_base=None, progress=print):
     summary["phase"] = "report"
     write_json(directory / "summary.json", summary)
     build_report(directory, config, summary["frames"])
-    if summary.get("status") == "failed" and summary.get("error_type") == "FileNotFoundError":
-        summary["status"] = "passed"
-        summary.pop("error_type", None)
     summary["complete_recorded_interval"] = bool(
-        np.isclose(summary["frames"][-1]["time_s"], times[-1], rtol=0, atol=1e-9)
+        len(summary["frames"]) == len(times)
+        and np.isclose(summary["frames"][-1]["time_s"], times[-1], rtol=0, atol=1e-9)
     )
+    if report_failure and not missing_frame_indices(
+        summary["frames"], times, recorded[-1]["time_s"]
+    ):
+        # The report was the only thing that failed and it now exists; the run
+        # earns the status its mesh, interval and history entitle it to.
+        summary["status"] = completion_status(summary)
+        summary.pop("error_type", None)
     write_json(directory / "summary.json", summary)
     return filled

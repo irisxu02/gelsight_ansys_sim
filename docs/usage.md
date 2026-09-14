@@ -77,8 +77,8 @@ validation/export entry.
 ## Mechanical steps and saved frames
 
 For material comparisons, saved images and mechanical checkpoints can be sampled
-independently. To keep the existing 0.01 s solve checkpoints but save 121 frames
-instead of 601 over the same six-second recording:
+independently. To keep the existing solve checkpoints but save a frame every
+0.05 s outside the slide:
 
 ```bash
 python scripts/run_simulation.py run --config configs/material_plane_slide/soft_rubber.json --sample-interval-s 0.05 --render-scale 4
@@ -87,10 +87,14 @@ python scripts/run_simulation.py run --config configs/material_plane_slide/soft_
 `--sample-interval-s` controls saved states, images, and GIF frames.
 `--solve-interval-s` controls mechanical checkpoints; ANSYS can take smaller
 adaptive substeps inside each checkpoint interval. `--maximum-time-increment-s`
-limits those internal steps. Every converged substep still undergoes the contact
-coverage and force-balance checks, including states between saved frames.
-Saved images use solved states, with no interpolation of deformation or forces.
-The saved-frame interval must be an integer multiple of the solve interval.
+limits those internal steps. A transient window (the slide, in the shipped
+presets) keeps its own sampling and solve intervals, so the command above
+records 290 frames over 812 checkpoints rather than 121: the press and holds
+are sampled at 0.05 s, the slide still at 0.01 s. Every converged substep still
+undergoes the contact coverage and force-balance checks, including states
+between saved frames. Saved images use solved states, with no interpolation of
+deformation or forces. The saved-frame interval must be an integer multiple of
+the solve interval, and both must divide the span they apply to.
 
 To benchmark reduced mechanical work and a smaller deformable object mesh:
 
@@ -355,7 +359,10 @@ python scripts/export_examples.py --validation outputs/validation/validation.jso
 
 The exporter checks completeness and file hashes, and excludes raw solver logs.
 `python scripts/audit_examples.py` also checks every exported preset, complete
-process GIF, raw-image/difference identity, marker flow, and GPU evidence.
+process GIF, raw-image/difference identity, marker flow, and GPU evidence;
+`--run docs/examples/<folder>` audits a curated export that is not a preset.
+The exporter itself refuses a run whose difference fields are not each frame's
+image minus the unloaded reference.
 `python scripts/compare_rendering.py` creates a raw-versus-subtracted illustration
 from a completed raw run.
 See [example exports](examples/README.md#exporting-new-snapshots) for local datasets and

@@ -215,3 +215,45 @@ class RenderQueueTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SolverNameTests(unittest.TestCase):
+    def test_the_watchdog_knows_the_solver_on_every_platform(self):
+        from gelsight_ansys.batch.render_queue import is_mapdl_process
+
+        for name in ("ansys.exe", "ANSYS252.exe", "ansys252", "ansys251", "ansys"):
+            self.assertTrue(is_mapdl_process(name), name)
+        for name in ("python.exe", "ansysedt.exe", "", None, "mapdl"):
+            self.assertFalse(is_mapdl_process(name), name)
+
+    def test_a_linux_solver_in_the_owned_directory_is_not_reported_missing(self):
+        from gelsight_ansys.batch.render_queue import SolverWatchdog
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            run = root / "run"
+            run.mkdir()
+            (run / "summary.json").write_text(
+                json.dumps({"status": "running", "phase": "solving"})
+            )
+            process = Mock()
+            process.info = {"name": "ansys252", "cmdline": ["ansys252"]}
+            process.cwd.return_value = str(run / "solver")
+            fake = SimpleNamespace(
+                process_iter=lambda attrs: [process],
+                NoSuchProcess=ProcessLookupError,
+                AccessDenied=PermissionError,
+            )
+            watchdog = SolverWatchdog(root)
+            watchdog.absent_since = 0
+            child = Mock()
+            with (
+                patch.dict(sys.modules, {"psutil": fake}),
+                patch(
+                    "gelsight_ansys.batch.render_queue.time.monotonic",
+                    return_value=121,
+                ),
+            ):
+                watchdog.check(child)
+            child.terminate.assert_not_called()
+            self.assertIsNone(watchdog.absent_since)

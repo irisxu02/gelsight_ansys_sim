@@ -208,7 +208,8 @@ private diagnostic artifacts and cannot replace validated example exports.
 `--config` also accepts imported-object and flat-target presets; for those,
 `--stop-time` selects the last trajectory pose to attempt. `--variants no_predictor
 unified` separately tests disabled displacement prediction and unified contact
-detection. `--timeout-s` bounds each diagnostic's wall time. Surface-projection
+detection; `no_predictor` is refused for a plane preset, whose baseline already
+solves with the predictor off. `--timeout-s` bounds each diagnostic's wall time. Surface-projection
 contact should only be tested with faceted targets, not primitive spheres.
 Successful short diagnostics do not establish a complete trajectory or mesh
 convergence. Output-thinning tests separately check that mechanical checkpoints

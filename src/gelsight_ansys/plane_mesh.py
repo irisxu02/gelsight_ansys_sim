@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from .mesh import Mesh, ObjectMesh, structured_mesh
+from .mesh import ObjectMesh, structured_mesh, tensor_mesh
 
 
 def depth_axis(thickness, size, refined_depth, growth=1.3):
@@ -34,39 +34,6 @@ def depth_axis(thickness, size, refined_depth, growth=1.3):
     return result
 
 
-def tensor_hexes(x, y, z):
-    zz, yy, xx = np.meshgrid(z, y, x, indexing="ij")
-    coordinates = np.column_stack((xx.ravel(), yy.ravel(), zz.ravel()))
-    nodes = np.arange(len(coordinates)).reshape(len(z), len(y), len(x))
-    hexes = np.stack(
-        (
-            nodes[:-1, :-1, :-1],
-            nodes[:-1, :-1, 1:],
-            nodes[:-1, 1:, 1:],
-            nodes[:-1, 1:, :-1],
-            nodes[1:, :-1, :-1],
-            nodes[1:, :-1, 1:],
-            nodes[1:, 1:, 1:],
-            nodes[1:, 1:, :-1],
-        ),
-        axis=-1,
-    ).reshape(-1, 8)
-    surface = nodes[-1].ravel()
-    face = np.arange(len(surface)).reshape(len(y), len(x))
-    quads = np.stack(
-        (face[:-1, :-1], face[:-1, 1:], face[1:, 1:], face[1:, :-1]), axis=-1
-    ).reshape(-1, 4)
-    return Mesh(
-        coordinates,
-        hexes,
-        surface,
-        quads,
-        np.concatenate((quads[:, [0, 1, 2]], quads[:, [0, 2, 3]])),
-        nodes[0].ravel(),
-        np.ones(len(hexes), dtype=int),
-    )
-
-
 def gel_mesh(case, element_size=None):
     data, rules = case.suite["sensor"]["gel"], case.suite["discretization"]
     if element_size is None and rules.get("gel_mesh", "uniform") == "uniform":
@@ -90,7 +57,7 @@ def gel_mesh(case, element_size=None):
         rules["refined_depth_into_each_deformable_body_m"],
         rules["maximum_element_growth_ratio"],
     )[::-1]
-    return tensor_hexes(x, y, z)
+    return tensor_mesh(x, y, z)
 
 
 def slab_mesh(
@@ -120,7 +87,7 @@ def slab_mesh(
         rules["refined_depth_into_each_deformable_body_m"],
         rules["maximum_element_growth_ratio"],
     )
-    mesh = tensor_hexes(x, y, z)
+    mesh = tensor_mesh(x, y, z)
     # A target's bottom face normal points towards the gel (-z).
     bottom_quads = mesh.bottom_nodes[mesh.surface_quads[:, [0, 3, 2, 1]]]
     return ObjectMesh(mesh.coordinates, mesh.hexes, bottom_quads, mesh.surface_nodes)

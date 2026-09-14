@@ -19,8 +19,6 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from parse_solver_monitor import read_monitor, summarize
-
 from gelsight_ansys.config import Config
 from gelsight_ansys.plane_coverage import ContactCoverage
 from gelsight_ansys.plane_mechanics import (
@@ -30,27 +28,16 @@ from gelsight_ansys.plane_mechanics import (
 )
 from gelsight_ansys.plane_mesh import gel_mesh, slab_mesh
 from gelsight_ansys.simulation_config import plane_solver
+from gelsight_ansys.solver_monitor import read_monitor, summarize
 
 ROOT = Path(__file__).resolve().parents[1]
 RUBBER = ROOT / "configs/material_plane_slide/soft_rubber.json"
 
 
 def deck(config):
-    """Render the APDL model deck without a licensed solver.
-
-    build() writes the deck before asking MAPDL to read it back, so the post-input
-    node count check is expected to fail against a mock and is not what is tested.
-    """
+    """The APDL model deck, composed without a licensed solver."""
     with tempfile.TemporaryDirectory() as tmp:
-        model = AnsysPlane(config, Path(tmp))
-        model.mapdl = MagicMock()
-        model.mapdl.get_value.return_value = 0
-        with unittest.mock.patch.object(AnsysPlane, "__exit__", lambda *a: None):
-            try:
-                model.build()
-            except RuntimeError as error:
-                assert "node import failed" in str(error), error
-        return (Path(tmp) / "plane_model.inp").read_text().splitlines()
+        return AnsysPlane(config, Path(tmp)).model_commands()
 
 
 def with_release(config, start=6.0, end=8.0):
@@ -115,7 +102,9 @@ class PlaneNumericsTests(unittest.TestCase):
         restore = source[
             source.index("def restore_model") : source.index("def solve_interval")
         ]
-        self.assertIn("solution_control_commands(self.config.solver)", restore)
+        self.assertIn(
+            "solution_control_commands(self.config.solver, predictor=False)", restore
+        )
 
     def test_diagnostics_name_the_failing_elements_only_when_requested(self):
         config = Config.load(RUBBER)
@@ -349,7 +338,6 @@ class NormalControlTests(unittest.TestCase):
 
     def model_for(self, config):
         import tempfile as tmpmod
-        from unittest.mock import MagicMock
 
         with tmpmod.TemporaryDirectory() as tmp:
             model = AnsysPlane(config, Path(tmp))
@@ -495,7 +483,6 @@ class NormalControlTests(unittest.TestCase):
         check within a tenth of a second of the handover.
         """
         import tempfile as tmpmod
-        from unittest.mock import MagicMock
 
         from gelsight_ansys.metrics import validate_frame
 
@@ -551,7 +538,6 @@ class NormalControlTests(unittest.TestCase):
         so it is worth exercising without a solver.
         """
         import tempfile as tmpmod
-        from unittest.mock import MagicMock
 
         from gelsight_ansys.metrics import frame_metrics, validate_frame
 
@@ -704,16 +690,41 @@ class TransientWindowTests(unittest.TestCase):
         self.assertGreater(kept, gap)
 
     def test_time_stepping_accuracy_controls_reach_the_solver(self):
-        """Both default to ANSYS's own behaviour and are opt-in per setup."""
+        """Both default to ANSYS's own values, written out so a restart that
+        returns to the default restates it instead of inheriting the database's."""
         from gelsight_ansys.config import Solver
 
         default = solution_control_commands(Solver())
-        self.assertFalse([c for c in default if c.startswith("CUTCONTROL")])
+        self.assertIn("CUTCONTROL,NPOINT,13", default)
+        self.assertIn("CUTCONTROL,NOITERPREDICT,0", default)
         tuned = solution_control_commands(
             Solver(transient_points_per_cycle=3, predict_cutback=False)
         )
         self.assertIn("CUTCONTROL,NPOINT,3", tuned)
         self.assertIn("CUTCONTROL,NOITERPREDICT,1", tuned)
+
+    def test_the_sphere_adapter_reads_the_same_controls(self):
+        """A control the configuration accepts reaches every adapter's deck."""
+
+        from gelsight_ansys.mechanics import AnsysGel
+
+        config = Config().with_solver(
+            nonlinear_diagnostics=True, equation_solver="mixed"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            model = AnsysGel(config, Path(tmp) / "solver")
+            recorded = []
+            model.command_block = lambda lines, name: recorded.extend(lines)
+            model.build()
+        self.assertIn("NLDIAG,CONT,ITER", recorded)
+        self.assertIn("EQSLV,MIXED", recorded)
+        self.assertIn("KEYOPT,2,2,0", recorded)
+        self.assertNotIn("PRED,OFF", recorded)
+
+    def test_the_plane_deck_uses_the_declared_equation_solver(self):
+        config = Config.load(RUBBER).with_solver(equation_solver="mixed")
+        self.assertIn("EQSLV,MIXED", deck(config))
+        self.assertIn("EQSLV,SPARSE", deck(Config.load(RUBBER)))
 
     def test_every_frame_must_land_on_a_checkpoint(self):
         """A frame between checkpoints is never written, and never complained of."""
@@ -809,7 +820,6 @@ class TransientWindowTests(unittest.TestCase):
 
     def model(self, config):
         import tempfile as tmpmod
-        from unittest.mock import MagicMock
 
         with tmpmod.TemporaryDirectory() as tmp:
             model = AnsysPlane(config, Path(tmp))
@@ -934,7 +944,6 @@ class SymmetricContactTests(unittest.TestCase):
 
     def model(self, config):
         import tempfile as tmpmod
-        from unittest.mock import MagicMock
 
         with tmpmod.TemporaryDirectory() as tmp:
             model = AnsysPlane(config, Path(tmp))

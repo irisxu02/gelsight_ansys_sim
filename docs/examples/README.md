@@ -97,9 +97,11 @@ in [Plane material specifications](../materials-and-contact.md#plane-material-sp
 and the run whose measurements set the shipped protocol. It is a diagnostic,
 not a preset: the rigid reference pressed to a commanded 5 N (0.030 mm
 travel-driven preload, then load control), held, slid 1 mm — accelerating into
-5 mm/s over 0.2 s, the whole slide integrated with mass at 0.1 ms — and held to
-4 s. Its resolved `config.json` ships inside the folder; the shipped presets run
-the same physics over a 10 mm slide.
+5 mm/s over 0.2 s, the slide integrated with mass at 0.1 ms from 50 ms in (its
+first 50 ms are pure stick and were solved quasi-statically at 2 ms) — and held
+to 4 s. Its resolved `config.json` ships inside the folder; the shipped presets
+run the same physics over a 10 mm slide, with mass integrated from 10 ms before
+the slide starts.
 
 | | |
 |---|---|
@@ -111,45 +113,54 @@ the same physics over a 10 mm slide.
 
 The slide was carried across three checkpoint resumes (t = 3.16, 3.2, 3.3), and
 frame 34 (t = 3.2) was rendered from the result file afterwards; both are
-recorded in `summary.json`. [Convergence](../convergence.md) explains what the
+recorded in `summary.json`. That frame's difference field was regenerated once
+more when an audit found the first offline render had measured it against
+itself rather than the unloaded reference; every frame now satisfies
+`rgb_difference_int16 = image − unloaded_reference`, which the exporter checks. [Convergence](../convergence.md) explains what the
 run established and why the slide has to be integrated with mass.
 All values are illustrative and uncalibrated. The suite fixes the same uniform
 100 kPa, ν=0.49 gel and camera/marker settings across cases.
 
 ### Plane geometry and loading sequence
 
-The specimen is a **60 × 35 × 3 mm slab** with a nominally planar bottom face.
-A rigid platen drives its top face; lateral faces are free. This finite
-thickness allows rubber, foam, and fabric to deform. The plane covers the
-whole nominal 25.25 × 20.75 mm sensor throughout the 10 mm x travel, including
-the region outside the camera FOV.
+The specimen is a **60 × 35 mm slab**, 3 mm thick (10 mm for the foam), with a
+nominally planar bottom face. A rigid platen drives its top face; lateral faces
+are free. This finite thickness allows rubber, foam, and fabric to deform. The
+plane covers the whole nominal 25.25 × 20.75 mm sensor throughout the 10 mm x
+travel, including the region outside the camera FOV.
 
-Initialization applies 0.25 mm backing travel over 2 s before recording.
-Material and contact history carry into the recorded sequence; initialization
-states are excluded from its image frames.
+The normal direction is load-controlled. Initialization presses the platen
+0.030 mm past first touch over 2 s - the one travel that is still a command,
+since a load cannot close an open gap - and hands the platen over to load
+control. Material and contact history carry into the recorded sequence;
+initialization states are excluded from its image frames.
 
-| Recorded time | Phase | Normal backing travel | x travel |
+| Recorded time | Phase | Normal load | x travel |
 |---|---|---|---|
-| 0–2 s | Press | Increase from 0.25 to 1 mm | 0 |
-| 2–3 s | Hold | 1 mm | 0 |
-| 3–5 s | Slide | Hold at 1 mm | Increase to 10 mm at 5 mm/s |
-| 5–6 s | Hold | 1 mm | 10 mm |
+| 0–2 s | Press | Ramp from 1 N to 5 N | 0 |
+| 2–3 s | Hold | 5 N | 0 |
+| 3–5.1 s | Slide | 5 N | Accelerate to 5 mm/s over 0.2 s, then 10 mm at 5 mm/s |
+| 5.1–6 s | Hold | 5 N | 10 mm |
 
-There is no release or lift-off phase. Backing travel is measured from first
-touch and includes specimen and gel compression. Compression is fixed during
-sliding; normal force may change through relaxation and redistribution.
-The specified sampling interval is 0.01 s, giving 601 recorded frames.
-Time represents physical loading duration in this suite; the sphere/flat
-examples use rate-independent quasi-static load steps.
+There is no release or lift-off phase. Platen travel is an outcome, read back
+from the solve each substep and recorded as `depth_m`: the rigid reference
+reaches 5 N at 0.093 mm, foam much deeper. The slide, from 10 ms before it
+starts, is integrated with the gel's mass at a 0.1 ms time step (see
+[Convergence](../convergence.md)); the press and holds are quasi-static.
+The sampling interval is 0.01 s throughout, giving 601 recorded frames and
+812 mechanical checkpoints. Time represents physical loading duration in this
+suite; the sphere/flat examples use rate-independent quasi-static load steps.
 
 ### Continuous contact requirement
 
 Full contact means continuous contact over the nominal sensor footprint at
 a macroscopic scale. The config requires the plane to cover the deformed
-sensor surface with at least 2 mm edge margin. Every 1 × 1 mm bin in sensor
-material coordinates must carry at least 1 µN of repulsive contact force,
-and total repulsive normal force must remain at least 0.01 N. Bins are clipped
-at the sensor boundary.
+sensor surface with at least 2 mm edge margin, and total repulsive normal
+force to remain at least 0.01 N. Every 1 × 1 mm bin in sensor material
+coordinates inside the camera's field of view must carry at least 1 µN of
+repulsive contact force; a slide unloads the gel's free corners, which lie
+outside every frame, so bin activity over the whole surface is recorded in
+each frame but not gated. Bins are clipped at the sensor boundary.
 
 These checks apply to all recorded frames and converged substeps. Microscopic
 asperity gaps are allowed; tangential slip and local separation remain valid

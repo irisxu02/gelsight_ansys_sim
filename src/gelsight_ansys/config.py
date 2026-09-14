@@ -350,11 +350,11 @@ class Config:
             p.get("force_controlled", False),
         )
 
-    def with_render_scale(self, scale):
+    def with_render_scale(self, scale, *, validate=True):
         """Increase optical sampling, preserving physical FOV and marker attachments."""
         if type(scale) is not int or scale < 1:
             raise ValueError("render-scale must be a positive integer")
-        return replace(
+        scaled = replace(
             self,
             camera=replace(
                 self.camera,
@@ -370,7 +370,8 @@ class Config:
                 if self.optics.marker_radius_px is not None
                 else None,
             ),
-        ).validate()
+        )
+        return scaled.validate() if validate else scaled
 
     def with_contact_refinement(self):
         """Apply the preview's local mesh grading, preserving dimensions and counts."""
@@ -663,7 +664,7 @@ class Config:
         if data.get("schema_version", 1) != 4:
             from .saved_config import read_saved_config
 
-            return read_saved_config(data)
+            return read_saved_config(data, validate=validate)
         values = dict(data)
         values.pop("config_kind", None)
         if "indenter" in values:

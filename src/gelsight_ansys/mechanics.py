@@ -6,6 +6,11 @@ import numpy as np
 
 from .ansys.materials import material_commands
 from .ansys.session import AnsysSession, gpu_statistics, validate_solve
+from .ansys.solution import (
+    contact_keyopt_commands,
+    equation_solver_command,
+    solution_control_commands,
+)
 from .contracts import SurfaceState
 from .mesh import sphere_mesh, structured_mesh
 
@@ -85,12 +90,7 @@ class AnsysGel(AnsysSession):
         commands += [
             "SECNUM,0",
             "ET,2,CONTA174",
-            "KEYOPT,2,2,0",
-            "KEYOPT,2,4,0",
-            "KEYOPT,2,10,2",
-            "KEYOPT,2,11,0",
-            "KEYOPT,2,12,0",
-            "KEYOPT,2,18,0",
+            *contact_keyopt_commands(ind, 2),
             "ET,3,TARGE170",
             f"MP,MU,3,{ind.friction:.16g}",
             f"R,1,{ind.radius_m:.16g},0,{ind.stiffness_factor:.16g},{ftoln:.16g},0,{-max(ind.radius_m, 2 * ind.clearance_m):.16g}",
@@ -148,13 +148,9 @@ class AnsysGel(AnsysSession):
             "/SOLU",
             "ANTYPE,STATIC",
             "NLGEOM,ON",
-            "NROPT,UNSYM" if c.solver.newton_raphson == "unsymmetric" else "NROPT,FULL",
-            f"EQSLV,{c.solver.equation_solver.upper()}",
-            "AUTOTS,ON",
-            "LNSRCH,ON",
-            f"NEQIT,{c.solver.iterations}",
+            equation_solver_command(c.solver),
+            *solution_control_commands(c.solver),
             f"NSUBST,{c.solver.initial_substeps},{c.solver.maximum_substeps},1",
-            f"CNVTOL,F,,{c.solver.force_tolerance:.16g},{c.solver.force_norm},1e-6",
             "RESCONTROL,DEFINE,ALL,LAST",
             "OUTRES,ALL,LAST",
             "KBC,0",

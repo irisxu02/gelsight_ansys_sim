@@ -159,6 +159,13 @@ def main(argv=None):
     }
     if set(args.variants) - allowed:
         parser.error("Unknown benchmark variant")
+    if "no_predictor" in args.variants and Config.load(args.config).is_plane:
+        # The plane adapter always solves with PRED,OFF, so the variant would
+        # only repeat the baseline under another name.
+        parser.error(
+            "no_predictor is a variant of the sphere adapter; the plane baseline "
+            "already runs with the predictor off"
+        )
     if args.timeout_s <= 0:
         parser.error("timeout-s must be positive")
     if not args.worker:

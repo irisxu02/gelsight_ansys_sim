@@ -6,6 +6,7 @@ import json
 import shutil
 from pathlib import Path
 
+from .audit_examples import verify_rgb_identity
 from .presets import CASES
 
 FILES = (
@@ -28,15 +29,38 @@ def digest(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def export_case(validation, key, output):
+def validated_run(validation, key):
+    """The passed run a validation record names for a catalog key."""
     records = json.loads(validation.read_text(encoding="utf-8"))
+    if key not in records:
+        raise KeyError(f"{key} is not in the validation record {validation}")
     record = records[key]
     if record["status"] != "passed":
-        raise ValueError("Only passed validation cases can be exported")
+        raise ValueError(f"Only passed validation cases can be exported: {key}")
     root = validation.parent.resolve()
     source = (root / record["run"]).resolve()
     source.relative_to(root)
-    export_run(source, output / CASES[key])
+    return source
+
+
+def export_case(validation, key, output):
+    export_run(validated_run(validation, key), output / CASES[key])
+
+
+def exportable_cases(validation, case):
+    """The catalog keys a request names, all checked before any is copied.
+
+    Validation runs choose their own case sets - the general presets, the
+    formulation references, the plane suite - so `all` means every catalog
+    case the record holds, and a named case has to be in it.
+    """
+    records = json.loads(validation.read_text(encoding="utf-8"))
+    keys = [key for key in CASES if key in records] if case == "all" else [case]
+    if not keys:
+        raise ValueError(f"No catalog case is in the validation record {validation}")
+    for key in keys:
+        validated_run(validation, key)
+    return keys
 
 
 def export_run(source, destination):
@@ -52,7 +76,6 @@ def export_run(source, destination):
     count = len(config["trajectory"])
     if summary["status"] != "passed" or len(summary["frames"]) != count:
         raise ValueError("A complete successful run is required")
-    destination.mkdir(parents=True, exist_ok=True)
     paths = [Path(name) for name in FILES]
     plane = (
         config.get("config_kind") == "resolved_material_plane_run"
@@ -94,6 +117,16 @@ def export_run(source, destination):
     for relative in paths:
         if not (source / relative).is_file():
             raise FileNotFoundError(f"Incomplete run: missing {relative}")
+    # The difference fields are only usable if each is its frame's image minus
+    # the unloaded reference; a frame rendered outside the run can break that.
+    verify_rgb_identity(source, count, plane)
+    destination.mkdir(parents=True, exist_ok=True)
+    previous = destination / "manifest.json"
+    obsolete = (
+        set(json.loads(previous.read_text(encoding="utf-8"))["files"])
+        if previous.is_file()
+        else set()
+    )
     manifest = {
         "schema_version": 1,
         "frame_count": count,
@@ -111,9 +144,14 @@ def export_run(source, destination):
             "bytes": target.stat().st_size,
             "sha256": checksum,
         }
-    # Remove stale generated frames when replacing a longer old trajectory.
+    # Whatever the previous export generated and this one does not - frames of
+    # a longer trajectory, contact files, an optional comparison image - is
+    # removed, so nothing stale can be opened beside the new data. Files the
+    # previous manifest never listed are not the exporter's to touch.
     wanted = {p.as_posix() for p in paths}
-    for folder in (*FOLDERS, "panels"):
+    for relative in obsolete - wanted:
+        (destination / relative).unlink(missing_ok=True)
+    for folder in (*FOLDERS, "panels", "contact"):
         for path in (destination / folder).glob("frame_*"):
             if path.is_file() and path.relative_to(destination).as_posix() not in wanted:
                 path.unlink()
@@ -137,7 +175,7 @@ def main():
     parser.add_argument("--output", type=Path, default=Path("docs/examples"))
     parser.add_argument("--case", choices=("all", *CASES), default="all")
     args = parser.parse_args()
-    for key in CASES if args.case == "all" else (args.case,):
+    for key in exportable_cases(args.validation, args.case):
         export_case(args.validation, key, args.output)
 
 

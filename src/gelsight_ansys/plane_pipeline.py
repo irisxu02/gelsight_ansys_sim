@@ -16,6 +16,59 @@ from .run_services import RunLifecycle, create_run, prepare_optics, process_fram
 from .surface import Markers, image_coordinates
 
 
+def render_unloaded_reference(reference, config, renderer, markers=None):
+    """Render the unloaded gel and make it the renderer's difference reference.
+
+    The renderer adopts the first image it produces as the reference every
+    difference field is measured against, so this has to be the first render of
+    a run - and of anything that renders a frame outside the run, or the frame
+    would be measured against itself.
+    """
+    markers = markers or Markers(
+        reference, config.optics.marker_spacing_m, config.camera, config.optics
+    )
+    rest_pixels = image_coordinates(markers.reference_m, config.camera)
+    optical = optical_surface(reference, config.camera, {}, backend=config.optics.backend)
+    # Renderer only uses optical_* when these are supplied.
+    baseline_fields = {
+        **optical,
+        "normals": optical["optical_normals"],
+        "valid_mask": optical["optical_valid_mask"],
+        "position_m": optical["optical_position_m"],
+        "displacement_m": np.zeros_like(optical["optical_position_m"]),
+    }
+    return renderer.render(baseline_fields, rest_pixels, rest_pixels)
+
+
+def completion_status(summary):
+    """The status a run earns once every check has passed.
+
+    A diagnostic run varied convergence controls part-way, so its frames are
+    solver evidence rather than a dataset; a pilot stopped short or used a
+    coarse mesh. Only a production run over the whole recorded interval passes.
+    """
+    if summary.get("diagnostic_run"):
+        return "diagnostic_passed"
+    if summary.get("production_mesh") and summary.get("complete_recorded_interval"):
+        return "passed"
+    return "pilot_passed"
+
+
+def time_semantics(case):
+    static = "quasi-static with Prony relaxation"
+    if case.inertia_windows:
+        windows = ", ".join(
+            f"{w['start_time_s']:g}-{w['end_time_s']:g} s" for w in case.inertia_windows
+        )
+        integration = f"{static} outside the transient windows ({windows}), which integrate the gel's mass"
+    else:
+        integration = f"{static}, no inertia"
+    return (
+        f"physical seconds; {integration}; initialization times are recorded in "
+        "the resolved config and retain material/contact history"
+    )
+
+
 def render_plane_frame(
     directory,
     index,
@@ -99,7 +152,7 @@ def run_plane(
         "bulk_material": case.bulk,
         "contact_model": case.case["contact"],
         "coating_model": "silicone homogenized into the uniform gel; no separate mechanical film",
-        "time_semantics": "physical seconds; quasi-static with Prony relaxation, no inertia; initialization times are recorded in the resolved config and retain material/contact history",
+        "time_semantics": time_semantics(case),
         "depth_semantics": "total platen travel from first touch, divided between gel and specimen",
         "gpu_mechanics_requested": config.solver.gpu,
         "gpu_mechanics_verified": False,
@@ -183,19 +236,7 @@ def run_plane(
             markers = Markers(
                 reference, config.optics.marker_spacing_m, config.camera, config.optics
             )
-            rest_pixels = image_coordinates(markers.reference_m, config.camera)
-            optical = optical_surface(
-                reference, config.camera, {}, backend=config.optics.backend
-            )
-            # Renderer only uses optical_* when these are supplied.
-            baseline_fields = {
-                **optical,
-                "normals": optical["optical_normals"],
-                "valid_mask": optical["optical_valid_mask"],
-                "position_m": optical["optical_position_m"],
-                "displacement_m": np.zeros_like(optical["optical_position_m"]),
-            }
-            baseline = renderer.render(baseline_fields, rest_pixels, rest_pixels)
+            baseline = render_unloaded_reference(reference, config, renderer, markers)
             Image.fromarray(baseline).save(directory / "unloaded_reference.png")
             coverage = ContactCoverage(case, reference.reference_m, reference.quads)
             summary["mesh"] = {
@@ -339,12 +380,5 @@ def run_plane(
             if final["max_surface_displacement_m"] > 1e-8:
                 raise RuntimeError("Elastic gel did not recover after plane release")
             summary["release_verified"] = True
-        lifecycle.finish(
-            config,
-            "diagnostic_passed"
-            if summary.get("diagnostic_run")
-            else "passed"
-            if summary["production_mesh"] and summary["complete_recorded_interval"]
-            else "pilot_passed",
-        )
+        lifecycle.finish(config, completion_status(summary))
     return directory, summary

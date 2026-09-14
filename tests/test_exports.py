@@ -8,6 +8,9 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
+import numpy as np
+from PIL import Image
+
 from gelsight_ansys.batch import export_examples as exporter
 
 
@@ -43,15 +46,30 @@ class ExampleExportTests(unittest.TestCase):
             }
         )
         (run / "visualization.json").write_text(json.dumps(visualization))
-        for folder in ("states", "fields", "bodies", "images"):
+        for folder in ("states", "bodies"):
             (run / folder).mkdir()
-            extension = "png" if folder == "images" else "npz"
             for i in range(2):
-                (run / folder / f"frame_{i:04d}.{extension}").write_bytes(
+                (run / folder / f"frame_{i:04d}.npz").write_bytes(
                     f"opaque {folder} payload for frame {i}\n".encode()
                 )
-                if folder == "fields":
-                    (run / folder / f"frame_{i:04d}.json").write_text("{}")
+        # Images and difference fields are real: the exporter checks that each
+        # difference is its frame minus the unloaded first frame.
+        (run / "images").mkdir()
+        (run / "fields").mkdir()
+        images = [
+            np.full((2, 3, 3), 100, dtype=np.uint8),
+            np.full((2, 3, 3), 140, dtype=np.uint8),
+        ]
+        for i, image in enumerate(images):
+            Image.fromarray(image).save(run / "images" / f"frame_{i:04d}.png")
+            np.savez(
+                run / "fields" / f"frame_{i:04d}.npz",
+                rgb_difference_int16=image.astype(np.int16) - images[0].astype(np.int16),
+                marker_pixel=np.zeros((1, 2)),
+                marker_reference_pixel=np.zeros((1, 2)),
+                marker_flow_pixel=np.zeros((1, 2)),
+            )
+            (run / "fields" / f"frame_{i:04d}.json").write_text("{}")
         if layout != "compact":
             (run / "panels").mkdir()
             for i in range(2):
@@ -145,3 +163,53 @@ class ExampleExportTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ExportSelectionTests(ExampleExportTests):
+    def test_a_wrong_difference_field_is_refused_before_anything_is_copied(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            run, validation = self.create_run(root, "compact")
+            np.savez(
+                run / "fields/frame_0001.npz",
+                rgb_difference_int16=np.zeros((2, 3, 3), dtype=np.int16),
+                marker_pixel=np.zeros((1, 2)),
+                marker_reference_pixel=np.zeros((1, 2)),
+                marker_flow_pixel=np.zeros((1, 2)),
+            )
+            with self.assertRaisesRegex(ValueError, "frame 1: rgb_difference_int16"):
+                self.export(validation, root / "examples")
+            self.assertFalse((root / "examples/sphere_press").exists())
+
+    def test_reexport_removes_an_optional_image_the_new_run_lacks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            run, validation = self.create_run(root, "compact")
+            (run / "raw_vs_subtracted.png").write_bytes(b"old rendering")
+            destination = self.export(validation, root / "examples")
+            (destination / "README.md").write_text("Independent note.")
+            (run / "raw_vs_subtracted.png").unlink()
+            self.export(validation, root / "examples")
+            manifest = json.loads((destination / "manifest.json").read_text())
+            self.assertNotIn("raw_vs_subtracted.png", manifest["files"])
+            self.assertFalse((destination / "raw_vs_subtracted.png").exists())
+            self.assertEqual((destination / "README.md").read_text(), "Independent note.")
+
+    def test_all_means_every_catalog_case_the_validation_record_holds(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            run, validation = self.create_run(root, "compact")
+            self.assertEqual(exporter.exportable_cases(validation, "all"), ["press"])
+            with self.assertRaisesRegex(KeyError, "slide is not in the validation record"):
+                exporter.exportable_cases(validation, "slide")
+            validation.write_text(
+                json.dumps(
+                    {
+                        "press": {"status": "passed", "run": "run"},
+                        "slide": {"status": "failed", "run": "run"},
+                    }
+                )
+            )
+            # A failed case in the record stops the whole request before any copy.
+            with self.assertRaisesRegex(ValueError, "Only passed"):
+                exporter.exportable_cases(validation, "all")

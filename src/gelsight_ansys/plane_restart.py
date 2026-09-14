@@ -10,6 +10,7 @@ import numpy as np
 from .config import Config
 from .contracts import SurfaceState
 from .metrics import validate_frame
+from .solver_monitor import last_converged
 
 
 @dataclass(frozen=True)
@@ -23,22 +24,6 @@ class PlaneRestart:
     # pipeline validated, so those substeps are replayed from gel.rst and put
     # through the same checks before anything new is solved.
     replay_from_substep: int | None = None
-
-
-def last_converged(monitor):
-    """(load step, substep, solver time) of the last row in a .mntr file."""
-    last = None
-    for line in Path(monitor).read_text(errors="replace").splitlines():
-        fields = line.split()
-        if len(fields) < 7:
-            continue
-        try:
-            last = (int(fields[0]), int(fields[1]), float(fields[6]))
-        except ValueError:
-            continue
-    if last is None:
-        raise ValueError(f"No converged substeps recorded in {monitor}")
-    return last
 
 
 # Newton-Raphson controls that a restart restates into the resumed database. They
@@ -133,15 +118,26 @@ def validate_plane_resume(
         )
     if sa["protocol"]["initialization"] != sb["protocol"]["initialization"]:
         raise ValueError("Resume cannot change preload history")
+    if sa["protocol"].get("normal_control") != sb["protocol"].get("normal_control"):
+        # Load control decides which platen degrees of freedom exist, and that
+        # is written into gel.rdb with the model.
+        raise ValueError("Resume cannot change the normal control mode")
     summary = json.loads((directory / "summary.json").read_text())
     frames = summary.get("frames", [])
     if not frames or len(frames) >= len(config.trajectory):
         raise ValueError("Resume needs saved states and remaining trajectory")
     last_time = float(frames[-1]["time_s"])
+    last_state = SurfaceState.load(directory / "states" / f"frame_{len(frames) - 1:04d}.npz")
+    # Where the solve actually got to. Everything up to this instant is in
+    # gel.rst and cannot be changed; the comparison of solved history has to
+    # run to the point the resume continues from, not to the last saved frame.
+    restart = PlaneRestart(last_state.load_step, last_state.substep, len(frames) - 1, last_time)
+    if from_checkpoint:
+        restart = checkpoint_restart(directory, config, summary, last_state, last_time)
     knots = {
-        last_time,
-        *(p["time_s"] for p in sa["protocol"]["keyframes"] if p["time_s"] <= last_time),
-        *(p["time_s"] for p in sb["protocol"]["keyframes"] if p["time_s"] <= last_time),
+        restart.time_s,
+        *(p["time_s"] for p in sa["protocol"]["keyframes"] if p["time_s"] <= restart.time_s),
+        *(p["time_s"] for p in sb["protocol"]["keyframes"] if p["time_s"] <= restart.time_s),
     }
     for at in knots:
         if old.physical_pose(at) != config.physical_pose(at):
@@ -150,6 +146,10 @@ def validate_plane_resume(
             at
         ) != config.specification.requires_contact(at):
             raise ValueError("Resume cannot change solved contact requirements")
+    if solved_transient(old.specification, restart.time_s) != solved_transient(
+        config.specification, restart.time_s
+    ):
+        raise ValueError("Resume cannot change the time integration of solved history")
     for i, metric in enumerate(frames):
         validate_frame(metric, old)
         state = SurfaceState.load(directory / "states" / f"frame_{i:04d}.npz")
@@ -192,7 +192,7 @@ def validate_plane_resume(
         # record says where the boundary is rather than implying one standard.
         summary.setdefault("acceptance_overrides", []).append(
             {
-                "resumed_at_time_s": last_time,
+                "resumed_at_time_s": restart.time_s,
                 "from": sa["contact_acceptance"],
                 "to": sb["contact_acceptance"],
             }
@@ -201,42 +201,59 @@ def validate_plane_resume(
         # Frames before and after the change met different convergence criteria,
         # so the sequence is evidence about solver behaviour, not a dataset.
         summary.setdefault("numerics_overrides", []).append(
-            {"resumed_at_time_s": last_time, "changed": changed}
+            {"resumed_at_time_s": restart.time_s, "changed": changed}
         )
         summary["diagnostic_run"] = True
-    restart = PlaneRestart(state.load_step, state.substep, len(frames) - 1, last_time)
-    if from_checkpoint:
-        # MAPDL keeps the last converged load step's restart point (Jobname.R001)
-        # whatever else its retention does, so that is the one point a resume
-        # can always reach. Everything the solver converged past the last frame
-        # is replayed through the pipeline's checks before new solving starts.
-        step, substep, solver_time = last_converged(directory / "solver/gel.mntr")
-        offset = config.specification.suite["protocol"]["initialization"][
-            "start_time_s"
-        ]
-        at = solver_time + offset
-        # The monitor prints solver time to limited precision and the offset
-        # adds rounding; the point is a checkpoint, so name it by the grid.
-        grid = config.specification.solve_times
-        nearest = grid[np.argmin(np.abs(grid - at))]
-        if abs(nearest - at) < 1e-6:
-            at = float(nearest)
-        if step < state.load_step or at < last_time - 1e-12:
-            raise ValueError("The solver's last converged state precedes the last frame")
-        recorded = [
-            r for r in summary.get("recorded_substeps", []) if r["load_step"] == step
-        ]
-        replay_from = (max(r["substep"] for r in recorded) + 1) if recorded else 1
-        if replay_from > substep:
-            replay_from = None
-        restart = PlaneRestart(step, substep, len(frames) - 1, at, replay_from)
-        summary.setdefault("checkpoint_resumes", []).append(
-            {
-                "last_frame_time_s": last_time,
-                "resumed_at_time_s": at,
-                "load_step": step,
-                "substep": substep,
-                "replayed_from_substep": replay_from,
-            }
-        )
     return restart, summary
+
+
+def solved_transient(case, until):
+    """The transient settings that governed solving up to an instant.
+
+    A window that started before the restart point shaped the substeps already
+    in gel.rst - its time increment, whether mass was integrated - so a resume
+    may not redefine it; windows entirely in the future are free to change.
+    """
+    transient = case.suite["protocol"].get("transient", {})
+    windows = [
+        w for w in transient.get("windows", []) if w["start_time_s"] < until + 1e-12
+    ]
+    return {
+        "numerical_damping": transient.get("numerical_damping", 0.005),
+        "windows": windows,
+    }
+
+
+def checkpoint_restart(directory, config, summary, last_state, last_time):
+    """The last converged load step, with what remains to be replayed.
+
+    MAPDL keeps the last converged load step's restart point (Jobname.R001)
+    whatever else its retention does, so that is the one point a resume can
+    always reach. Everything the solver converged past the last frame is
+    replayed through the pipeline's checks before new solving starts.
+    """
+    step, substep, solver_time = last_converged(directory / "solver/gel.mntr")
+    offset = config.specification.suite["protocol"]["initialization"]["start_time_s"]
+    at = solver_time + offset
+    # The monitor prints solver time to limited precision and the offset adds
+    # rounding; the point is a checkpoint, so name it by the grid.
+    grid = config.specification.solve_times
+    nearest = grid[np.argmin(np.abs(grid - at))]
+    if abs(nearest - at) < 1e-6:
+        at = float(nearest)
+    if step < last_state.load_step or at < last_time - 1e-12:
+        raise ValueError("The solver's last converged state precedes the last frame")
+    recorded = [r for r in summary.get("recorded_substeps", []) if r["load_step"] == step]
+    replay_from = (max(r["substep"] for r in recorded) + 1) if recorded else 1
+    if replay_from > substep:
+        replay_from = None
+    summary.setdefault("checkpoint_resumes", []).append(
+        {
+            "last_frame_time_s": last_time,
+            "resumed_at_time_s": at,
+            "load_step": step,
+            "substep": substep,
+            "replayed_from_substep": replay_from,
+        }
+    )
+    return PlaneRestart(step, substep, len(summary["frames"]) - 1, at, replay_from)

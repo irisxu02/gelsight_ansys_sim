@@ -27,18 +27,16 @@ def contact_properties(contact, numerics):
 def friction_commands(contact, numerics, number, contact_type=2):
     law = contact["friction"]
     if contact["adhesion"]["model"] != "none" or "x" in law:
-        model = "INTER"
+        # Adhesion and orthotropic friction run in the user interaction
+        # routine, which keeps 24 state variables at each of 4 detection points.
         values = contact_properties(contact, numerics)
-        commands = [f"TB,{model},{number},,{len(values)},USER"]
+        commands = [f"TB,INTER,{number},,{len(values)},USER"]
         for start in range(0, len(values), 6):
             commands.append(
                 f"TBDATA,{start + 1},"
                 + ",".join(f"{v:.16g}" for v in values[start : start + 6])
             )
-        if model == "INTER":
-            commands.append(
-                f"NSVR,{contact_type},96"
-            )  # 24 variables x 4 detection points.
+        commands.append(f"NSVR,{contact_type},96")
         return commands
     return [
         f"MP,MU,{number},{law['kinetic_coefficient']:.16g}",

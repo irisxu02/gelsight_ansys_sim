@@ -393,8 +393,25 @@ def build_report(directory, config, metrics):
         contact_description = (
             f"friction: {contact['friction']['model']}; adhesion: {contact['adhesion']['model']}"
         )
+    depth_note = "Depth is commanded travel; a soft object absorbs part of it."
+    frame_note = "Frame zero is an unloaded reference; later frames are converged ANSYS load steps."
+    if config.is_plane:
+        frame_note = (
+            "Recording starts after the preload; the unloaded reference is "
+            "unloaded_reference.png, and every frame is a converged ANSYS substep."
+        )
+        if config.specification.normal_control == "prescribed_normal_force":
+            depth_note = (
+                "Depth is the platen travel reached under the commanded normal "
+                "force, read back from the solve; it is an outcome, not a setting."
+            )
+        else:
+            depth_note = (
+                "Depth is commanded platen travel from first touch, shared "
+                "between the gel and the specimen."
+            )
     material_note = html.escape(
-        f"{layer}; {object_description}; {contact_description}. Provisional material parameters. Depth is commanded travel; a soft object absorbs part of it."
+        f"{layer}; {object_description}; {contact_description}. Provisional material parameters. {depth_note}"
     )
     data = json.dumps(metrics, allow_nan=False).replace("</", "<\\/")
     animation = (
@@ -434,7 +451,9 @@ def build_report(directory, config, metrics):
         + '<p><a href="process.gif">Full-process GIF</a>'
         + tactile_link
         + """ · <a href="metrics.csv">Metrics CSV</a> · <a href="summary.json">Run summary</a> · <a href="visualization.json">Plot scales</a></p>
-<p class="note">GIF timing is illustrative. Frame zero is an unloaded reference; later frames are converged ANSYS load steps.</p>
+<p class="note">GIF timing is illustrative. """
+        + html.escape(frame_note)
+        + """</p>
 <img src="force_curve.png" alt="Force and twisting-moment curves">
 <script>const data="""
         + data
