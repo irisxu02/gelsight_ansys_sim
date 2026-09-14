@@ -198,6 +198,68 @@ class CheckpointResumeTests(unittest.TestCase):
             later = later.with_plane_sampling()
             validate_plane_resume(root, later, from_checkpoint=True)
 
+    def restored_set(self, point, model, drift=0.0):
+        """What MAPDL answers about the result set a restart landed on.
+
+        Its time is the result file's own, which is not the rounded value the
+        solution monitor printed; drift stands for that difference.
+        """
+
+        def answer(entity, number, item, kind):
+            return {
+                "TIME": point.time_s + model.time_offset + drift,
+                "LSTP": point.load_step,
+                "SBST": point.substep,
+            }[kind]
+
+        return answer
+
+    def test_a_restart_is_identified_by_its_substep_not_its_printed_time(self):
+        """The monitor prints five digits; a mid-step checkpoint is named to that."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config, model, state = self.checkpoint_fixture(root, 7)
+            point, _ = validate_plane_resume(root, config, from_checkpoint=True)
+            np.savez(
+                root / "solid_mesh.npz",
+                gel_reference_m=model.mesh.coordinates,
+                gel_hexes=model.mesh.hexes,
+            )
+            model.parameters = {"PLANE_NMISC": 197}
+            model.command_block = Mock(
+                return_value=FILE_SUMMARY.replace("178      107", "  3        7")
+            )
+            later = deepcopy(state)
+            later.displacement_m[:, 2] = -1e-5
+            model.extract_saved_result = Mock(return_value=later)
+            model.achieved_travel = Mock(return_value=1e-5)
+
+            def restore(drift, substep=None):
+                model.resume_point = replace(point, substep=substep or point.substep)
+                model.mapdl = Mock()
+                model.mapdl.parameters = {"PLANE_NMISC": 197}
+                model.mapdl.get_value.side_effect = self.restored_set(
+                    point, model, drift
+                )
+                with patch(
+                    "gelsight_ansys.rst_contact.ContactResult", return_value=Mock()
+                ):
+                    model.restore_model()
+
+            # The result file's instant differs from the printed one; accepted,
+            # and the run continues on the exact instant rather than the name.
+            restore(1.7e-5)
+            self.assertAlmostEqual(model.resume_point.time_s, point.time_s + 1.7e-5)
+            self.assertAlmostEqual(model.previous_solver_time, point.time_s + model.time_offset + 1.7e-5)
+            # A different substep than the one asked for is refused outright,
+            # which the loose time comparison alone could not catch: substeps
+            # here are tens of microseconds apart.
+            with self.assertRaisesRegex(RuntimeError, "not the requested"):
+                restore(0.0, substep=6)
+            # A time far from the name means the restart landed somewhere else.
+            with self.assertRaisesRegex(RuntimeError, "does not match"):
+                restore(0.01)
+
     def test_a_fully_checked_checkpoint_past_the_last_frame_is_not_compared_to_it(self):
         """Identity, not replay work, decides whether the point is a saved frame."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -214,7 +276,7 @@ class CheckpointResumeTests(unittest.TestCase):
             )
             model.resume_point = point
             model.mapdl = Mock()
-            model.mapdl.get_value.return_value = point.time_s + model.time_offset
+            model.mapdl.get_value.side_effect = self.restored_set(point, model)
             model.mapdl.parameters = {"PLANE_NMISC": 197}
             model.command_block = Mock(return_value=FILE_SUMMARY.replace("178      107", "  3        7"))
             later = deepcopy(state)
@@ -228,7 +290,7 @@ class CheckpointResumeTests(unittest.TestCase):
             # The same point named as the saved frame itself is checked against it.
             frame_point = replace(point, load_step=1, substep=100, time_s=0.0)
             model.resume_point = frame_point
-            model.mapdl.get_value.return_value = model.time_offset
+            model.mapdl.get_value.side_effect = self.restored_set(frame_point, model)
             model.command_block = Mock(return_value=FILE_SUMMARY.replace("178      107", "  1      100"))
             with (
                 patch("gelsight_ansys.rst_contact.ContactResult", return_value=Mock()),

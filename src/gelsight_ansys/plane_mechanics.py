@@ -347,10 +347,28 @@ class AnsysPlane(AnsysSession):
             ],
             "restore_plane",
         )
+        # What was restored is settled by which substep came back, not by its
+        # clock: a checkpoint inside a load step is named from the solution
+        # monitor, which prints solver time to five digits, while the result
+        # file holds the instant itself. Comparing those two to 1e-10 refused a
+        # perfectly good restart 244 frames in. The identity is exact; the time
+        # is then checked against the name it was given, and the run continues
+        # on the instant the result file states.
+        restored = (
+            int(self.mapdl.get_value("ACTIVE", 0, "SET", "LSTP")),
+            int(self.mapdl.get_value("ACTIVE", 0, "SET", "SBST")),
+        )
+        if restored != (point.load_step, point.substep):
+            raise RuntimeError(
+                f"Restart restored load step {restored[0]} substep {restored[1]}, "
+                f"not the requested {point.load_step}/{point.substep}"
+            )
         expected_time = point.time_s + self.time_offset
-        actual_time = self.mapdl.get_value("ACTIVE", 0, "SET", "TIME")
-        if not np.isclose(actual_time, expected_time, rtol=0, atol=1e-10):
+        actual_time = float(self.mapdl.get_value("ACTIVE", 0, "SET", "TIME"))
+        if not np.isclose(actual_time, expected_time, rtol=0, atol=1e-4):
             raise RuntimeError("Restart result time does not match the saved state")
+        point = replace(point, time_s=actual_time - self.time_offset)
+        self.resume_point = point
         self.nonmisc_base = int(self.mapdl.parameters["PLANE_NMISC"])
         reader = ContactResult(
             self.directory / "gel.rst",
@@ -406,7 +424,7 @@ class AnsysPlane(AnsysSession):
                         atol=1e-12,
                     )
         del reader
-        self.previous_solver_time = expected_time
+        self.previous_solver_time = actual_time
         # gel.rdb carries the controls written when the model was first built, so
         # a changed tolerance only reaches the solver if it is restated here.
         listing = self.command_block(
