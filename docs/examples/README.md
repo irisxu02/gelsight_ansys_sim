@@ -101,8 +101,8 @@ travel-driven preload, then load control), held, slid 1 mm — accelerating into
 first 50 ms are pure stick and were solved quasi-statically at 2 ms) — and held
 to 4 s. Its resolved `config.json` and `summary.json` remain in the local full
 export; Git tracks only this diagnostic's preview, force plot, and animation.
-The shipped presets use a 10 mm slide, with mass integrated from 10 ms before
-the slide starts. They do not reproduce this diagnostic's exact schedule.
+The shipped presets slide 2 mm, with mass integrated from 10 ms before the slide
+starts. They do not reproduce this diagnostic's exact schedule.
 
 | | |
 |---|---|
@@ -139,18 +139,28 @@ initialization states are excluded from its image frames.
 | Recorded time | Phase | Normal load | x travel |
 |---|---|---|---|
 | 0–2 s | Press | Ramp from 1 N to 5 N | 0 |
-| 2–3 s | Hold | 5 N | 0 |
-| 3–5.1 s | Slide | 5 N | Accelerate to 5 mm/s over 0.2 s, then continue to 10 mm total travel |
-| 5.1–6 s | Hold | 5 N | 10 mm |
+| 2–2.3 s | Hold | 5 N | 0 |
+| 2.3–2.8 s | Slide | 5 N | Accelerate to 5 mm/s over 0.2 s, then continue to 2 mm total travel |
+| 2.8–3.1 s | Hold | 5 N | 2 mm |
 
 There is no release or lift-off phase. Platen travel is an outcome, read back
 from the solve each substep and recorded as `depth_m`: the rigid reference
 reaches 5 N at 0.093 mm, foam much deeper. The slide, from 10 ms before it
 starts, is integrated with the gel's mass at a 0.1 ms time step (see
 [Convergence](../convergence.md)); the press and holds are quasi-static.
-The sampling interval is 0.01 s throughout, giving 601 recorded frames and
-812 mechanical checkpoints. Time represents physical loading duration in this
+The sampling interval is 0.01 s throughout, giving 311 recorded frames and
+362 mechanical checkpoints. Time represents physical loading duration in this
 suite; the sphere/flat examples use rate-independent quasi-static load steps.
+
+The slide is 2 mm and the holds are 0.3 s because of what they cost and what
+they show. Transient sliding converges about 16,800 substeps per second, so
+distance is the price of the protocol; the completed rigid reference reached
+steady sliding, its first stick-slip release and its re-stick well inside 1 mm.
+The holds bracket the slide rather than settle the material: re-stick happens
+within 0.1 s of the platen stopping, while the viscoelastic specimens have a 2 s
+Prony branch that no hold in this protocol waits out. Both holds are the same
+for every specimen, so the comparison is between materials under one schedule,
+not between materials at equilibrium.
 
 ### Continuous contact requirement
 
@@ -183,7 +193,7 @@ The detached queue discovers all registered presets with **1280 × 960 CUDA
 rendering** (`--render-scale 4`). All presets default to the standard uniform
 gel mesh; plane objects use independent simplified meshes. The queue
 exports a case only after its numerical and data-integrity checks pass.
-The seven plane cases use their own validation path and retain the 601-frame protocol.
+The seven plane cases use their own validation path and the 311-frame protocol.
 
 Each local export is placed in `docs/examples/<config_name>/`, replacing its
 previous generated dataset only after validation and checksum verification.

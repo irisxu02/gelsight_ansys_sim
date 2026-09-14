@@ -275,7 +275,7 @@ releases the plane, so it cannot demonstrate pull-off strength or detachment.
 
 The [completed rigid 1 mm slide](examples/README.md#rigid-plane-1-mm-slide-at-5-n)
 provides one diagnostic result. It does not establish the expected differences
-across all seven materials over the shipped 10 mm protocol. Smooth surfaces in
+across all seven materials over the shipped 2 mm protocol. Smooth surfaces in
 full-area contact may produce similar RGB images; force, marker displacement,
 and their time evolution can carry stronger differences. The sequence has no
 release, one slide direction, and one commanded slide speed, so it cannot
@@ -296,7 +296,7 @@ model parameter group:
 No specimen-specific calibration datasets are included.
 
 Densities supply mass to the gel and deformable specimens. The shipped suite
-integrates inertia from 2.99 to 5.1 s with a maximum time increment of 0.1 ms;
+integrates inertia from 2.29 to 2.8 s with a maximum time increment of 0.1 ms;
 the rest of the protocol is quasi-static. See [transient controls](convergence.md).
 Numerical convergence, contact coverage, and experimental calibration remain
 separate requirements.

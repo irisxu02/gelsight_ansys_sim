@@ -46,7 +46,7 @@
     "Near-incompressible rubber approximation; all relaxation parameters need fitting.",
     "Platen travel, an outcome under load control, is total specimen-plus-gel compression, not gel indentation alone.",
     "Overhang sensitivity variant of soft_rubber.json: identical material, contact and protocol, with the specimen trimmed from 60x35 mm to 52x28 mm.",
-    "The whole specimen top face is clamped to the platen, so overhang outside the sensor footprint acts as a rigid flange beside the contact edge. 52x28 mm is the smallest size that keeps the 2 mm edge margin through the 10 mm slide (minimum 49.25 x 24.75 mm) and removes 31% of the specimen elements.",
+    "The whole specimen top face is clamped to the platen, so overhang outside the sensor footprint acts as a rigid flange beside the contact edge. 52x28 mm was the smallest size that kept the 2 mm edge margin through the 10 mm slide this suite used to prescribe, and it removes 31% of the specimen elements. The shipped slide is now 2 mm, which needs only 31.25 x 24.75 mm, so this variant is no longer minimal; it is kept at 52x28 mm so its overhang comparison against the 60x35 mm baseline stays the one that was measured.",
     "Compare the force-travel curve against soft_rubber.json: agreement means the overhang was mechanically inert, divergence means the flange carries load and the fixture must be checked against the physical backing plate."
   ],
   "expected_observables": [

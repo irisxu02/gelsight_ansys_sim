@@ -89,8 +89,8 @@ python scripts/run_simulation.py run --config configs/material_plane_slide/soft_
 adaptive substeps inside each checkpoint interval. `--maximum-time-increment-s`
 limits those internal steps. A transient window (the slide, in the shipped
 presets) keeps its own sampling and solve intervals, so the command above
-records 290 frames over 812 checkpoints rather than 121: the press and holds
-are sampled at 0.05 s, the slide still at 0.01 s. Every converged substep still
+records 104 frames over 362 checkpoints rather than 63: the press and holds are
+sampled at 0.05 s, the slide still at 0.01 s. Every converged substep still
 undergoes the contact coverage checks, including states between saved frames.
 Contact/backing force balance is required outside inertia windows; inside them
 the residual is recorded. Saved-frame pilot-load and raster checks remain active.

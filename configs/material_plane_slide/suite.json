@@ -6,7 +6,7 @@
   "runnable_with_current_cli": true,
   "calibrated": false,
   "units": "SI",
-  "description": "An oversized finite plane is pressed onto the whole nominal sensor footprint under a commanded 5 N load, held, slid 10 mm at 5 mm/s with the load maintained, and held again. The slide is integrated with mass. All recorded states must keep macroscopic contact over the imaged region.",
+  "description": "An oversized finite plane is pressed onto the whole nominal sensor footprint under a commanded 5 N load, held, slid 2 mm at 5 mm/s with the load maintained, and held again. The slide is integrated with mass. All recorded states must keep macroscopic contact over the imaged region.",
   "config_contract": {
     "version": "proposed_v1",
     "path_base": "directory_containing_suite_json",
@@ -161,7 +161,7 @@
     },
     "recorded_interval_s": [
       0,
-      6
+      3.1
     ],
     "pose_interpolation": "linear",
     "phases": [
@@ -173,20 +173,20 @@
       {
         "name": "hold_after_press",
         "start_time_s": 2,
-        "end_time_s": 3
+        "end_time_s": 2.3
       },
       {
         "name": "slide_at_fixed_compression",
-        "start_time_s": 3,
-        "end_time_s": 5.1,
+        "start_time_s": 2.3,
+        "end_time_s": 2.8,
         "speed_m_s": 0.005,
         "acceleration_m_s2": 0.025,
-        "distance_m": 0.01
+        "distance_m": 0.002
       },
       {
         "name": "hold_after_slide",
-        "start_time_s": 5.1,
-        "end_time_s": 6
+        "start_time_s": 2.8,
+        "end_time_s": 3.1
       }
     ],
     "keyframes": [
@@ -226,88 +226,67 @@
         "normal_force_n": 5.0
       },
       {
-        "time_s": 3.0,
+        "time_s": 2.3,
         "y_m": 0,
         "twist_rad": 0,
         "normal_force_n": 5.0,
         "x_m": 0.0
       },
       {
-        "time_s": 3.01,
+        "time_s": 2.31,
         "y_m": 0,
         "twist_rad": 0,
         "normal_force_n": 5.0,
         "x_m": 1.25e-06
       },
       {
-        "time_s": 3.02,
+        "time_s": 2.32,
         "y_m": 0,
         "twist_rad": 0,
         "normal_force_n": 5.0,
         "x_m": 5e-06
       },
       {
-        "time_s": 3.05,
+        "time_s": 2.35,
         "y_m": 0,
         "twist_rad": 0,
         "normal_force_n": 5.0,
         "x_m": 3.125e-05
       },
       {
-        "time_s": 3.1,
+        "time_s": 2.4,
         "y_m": 0,
         "twist_rad": 0,
         "normal_force_n": 5.0,
         "x_m": 0.000125
       },
       {
-        "time_s": 3.15,
+        "time_s": 2.45,
         "y_m": 0,
         "twist_rad": 0,
         "normal_force_n": 5.0,
         "x_m": 0.00028125
       },
       {
-        "time_s": 3.2,
+        "time_s": 2.5,
         "y_m": 0,
         "twist_rad": 0,
         "normal_force_n": 5.0,
         "x_m": 0.0005
       },
       {
-        "time_s": 3.5,
+        "time_s": 2.8,
         "y_m": 0,
         "twist_rad": 0,
         "normal_force_n": 5.0,
         "x_m": 0.002
       },
       {
-        "time_s": 4.0,
+        "time_s": 3.1,
         "y_m": 0,
         "twist_rad": 0,
         "normal_force_n": 5.0,
-        "x_m": 0.0045
-      },
-      {
-        "time_s": 4.5,
-        "y_m": 0,
-        "twist_rad": 0,
-        "normal_force_n": 5.0,
-        "x_m": 0.007
-      },
-      {
-        "time_s": 5.1,
-        "y_m": 0,
-        "twist_rad": 0,
-        "normal_force_n": 5.0,
-        "x_m": 0.01
-      },
-      {
-        "time_s": 6.0,
-        "y_m": 0,
-        "twist_rad": 0,
-        "normal_force_n": 5.0,
-        "x_m": 0.01
+        "x_m": 0.002
       }
     ],
     "release": false,
@@ -317,14 +296,15 @@
       "Equal travel is not equal load. A rigid specimen leaves the gel carrying everything while foam absorbs most of it, so a travel-driven comparison compares materials at different loads, and each preset has to be refitted to its own material. Commanding the load removes both problems: one protocol transfers to every specimen, and the travel each one needs becomes a measurement rather than a setting.",
       "The press ramps from 1 N so the handover from preload to load control is gradual whichever side of 1 N the preload landed on.",
       "The slide accelerates into its 5 mm/s over 0.2 s (500 um) instead of stepping into it: a velocity step is an infinite acceleration once mass is present, and even quasi-statically it asked every contact point to cross its elastic slip allowance in a single increment.",
-      "The slide is integrated with mass at 0.1 ms; see protocol.transient. It is the expensive part of the protocol: about 21,000 substeps for 10 mm."
+      "The slide is integrated with mass at 0.1 ms; see protocol.transient. It is the expensive part of the protocol, and it sets the slide distance: the completed rigid reference converged about 16,800 substeps per second of sliding, so every additional millimetre costs about 3,400 substeps of transient solving. 2 mm is what the rigid reference showed is needed - it reaches steady sliding, its first stick-slip release, and re-stick in the hold - rather than what a longer traverse would add.",
+      "The holds are 0.3 s. The rigid reference re-sticks within 0.1 s of the platen stopping, so 0.3 s covers it. For the viscoelastic specimens neither hold reaches equilibrium: their slow Prony branch is 2 s, so the slide starts and the record ends while the material is still creeping. That is a property of the protocol, identical for every specimen, not a settling time to read a relaxed modulus from."
     ],
     "transient": {
       "numerical_damping": 0.05,
       "windows": [
         {
-          "start_time_s": 2.99,
-          "end_time_s": 5.1,
+          "start_time_s": 2.29,
+          "end_time_s": 2.8,
           "time_increment_s": 0.0001,
           "solve_interval_s": 0.005,
           "sample_interval_s": 0.01,
@@ -460,7 +440,7 @@
     "labels": "material_family_and_physical_parameters; no_claim_of_measured_specimen_identity",
     "limitations": [
       "This sequence has no release, so recovery after separation and adhesive pull-off are not observed.",
-      "A single x slide cannot identify all anisotropic parameters or all rate dependence.",
+      "A single 2 mm x slide cannot identify all anisotropic parameters or all rate dependence, and neither hold is long enough to read an equilibrium modulus from.",
       "The fluffy case represents an effective layer; it does not resolve individual fibers.",
       "The slide is integrated with mass, but no vibration channel is calibrated or claimed.",
       "Platen travel is an outcome here, so a case's indentation depth is a result to read, not a parameter to compare against another run's."

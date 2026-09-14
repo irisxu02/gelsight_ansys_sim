@@ -151,11 +151,11 @@ when they fall between regular checkpoints. `solver.maximum_time_increment_s`
 is the separate limit on adaptive ANSYS substeps.
 
 Transient windows add their own sampling and checkpoint grids. With the shipped
-suite, `sample_interval_s: 0.05` and `solve_interval_s: 0.01` produce 290 saved
-frames and 812 mechanical checkpoints over six seconds. The window from 2.99 to
-5.1 s retains its 0.01 s frame interval and 0.005 s checkpoint interval; its
-maximum internal time increment is 0.0001 s. Without window refinement, the
-same base intervals would produce 121 frames and 601 checkpoints.
+suite, `sample_interval_s: 0.05` and `solve_interval_s: 0.01` produce 104 saved
+frames and 362 mechanical checkpoints over the 3.1 s recording. The window from
+2.29 to 2.8 s retains its 0.01 s frame interval and 0.005 s checkpoint interval;
+its maximum internal time increment is 0.0001 s. Without window refinement, the
+same base intervals would produce 63 frames.
 Every converged recorded substep still receives the applicable
 [mechanical acceptance checks](dataset.md#metrics-and-acceptance).
 See [sampling CLI options](usage.md#mechanical-steps-and-saved-frames).

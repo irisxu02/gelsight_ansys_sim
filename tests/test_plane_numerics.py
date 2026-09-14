@@ -252,7 +252,8 @@ class PlaneNumericsTests(unittest.TestCase):
             "penetration": np.zeros((faces, 4)),
             "status": np.full((faces, 4), 3),
         }
-        for at in (0.0, 5.0):
+        # First touch and the end of the slide, wherever the protocol puts them.
+        for at in (0.0, float(compact.specification.frame_times[-1])):
             record, _ = coverage.evaluate(state, details, compact.physical_pose(at))
             coverage.validate(record)
         # Same material, contact and protocol; only the clamped overhang changes.
@@ -800,13 +801,20 @@ class TransientWindowTests(unittest.TestCase):
         case = config.specification
         window = case.transient_windows[0]
         model = self.model(config)
-        for at in (0.5, 2.5, window["end_time_s"] + 0.05, 5.5):
+        middle = (window["start_time_s"] + window["end_time_s"]) / 2
+        outside = (
+            0.5,
+            window["start_time_s"] - 0.05,
+            window["end_time_s"] + 0.05,
+            float(case.frame_times[-1]),
+        )
+        for at in outside:
             self.assertIsNone(case.transient_at(at), at)
             self.assertEqual(
                 model.time_integration_commands(config.physical_pose(at)),
                 ["TIMINT,OFF"],
             )
-        for at in (window["start_time_s"], 3.0, window["end_time_s"]):
+        for at in (window["start_time_s"], middle, window["end_time_s"]):
             self.assertIsNotNone(case.transient_at(at), at)
             commands = model.time_integration_commands(config.physical_pose(at))
             self.assertEqual(commands[0], "TIMINT,ON")
@@ -862,7 +870,8 @@ class TransientWindowTests(unittest.TestCase):
         self.assertAlmostEqual(float(np.diff(solves[~inside]).min()), 0.02)
         # Every saved frame must fall on a solved instant.
         self.assertTrue(np.all(np.isin(np.round(frames, 12), np.round(solves, 12))))
-        self.assertEqual(case.time_increment_at(3.0, 0.02), window["time_increment_s"])
+        middle = (window["start_time_s"] + window["end_time_s"]) / 2
+        self.assertEqual(case.time_increment_at(middle, 0.02), window["time_increment_s"])
         self.assertEqual(case.time_increment_at(1.0, 0.02), 0.02)
 
     def test_the_slide_accelerates_instead_of_stepping_to_speed(self):
@@ -878,7 +887,13 @@ class TransientWindowTests(unittest.TestCase):
         ramped = (case.pose(onset + 0.02)["x_m"] - case.pose(onset)["x_m"]) / 0.02
         self.assertLess(ramped, speed)
         self.assertGreater(ramped, 0)
-        steady = (case.pose(4.5)["x_m"] - case.pose(4.0)["x_m"]) / 0.5
+        # Steady sliding: the last tenth of the slide, once the ramp is over.
+        end = [
+            p["end_time_s"]
+            for p in case.suite["protocol"]["phases"]
+            if p["name"] == "slide_at_fixed_compression"
+        ][0]
+        steady = (case.pose(end)["x_m"] - case.pose(end - 0.1)["x_m"]) / 0.1
         self.assertAlmostEqual(steady, speed, places=4)
 
     def test_incoherent_transient_declarations_are_rejected(self):

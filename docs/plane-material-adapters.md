@@ -35,9 +35,9 @@ solve under load control.
 Rubber, foam, and fabric deform; reference, slippery, rough, and sticky specimens
 are rigid. Roughness is explicit moving target geometry.
 
-The preload runs from physical time −2 to 0 s. Recording contains 601 frames
-from 0 to 6 s over 812 mechanical checkpoints. The maximum internal time
-increment is 0.01 s outside the 2.99–5.1 s transient window and 0.0001 s inside
+The preload runs from physical time −2 to 0 s. Recording contains 311 frames
+from 0 to 3.1 s over 362 mechanical checkpoints. The maximum internal time
+increment is 0.01 s outside the 2.29–2.8 s transient window and 0.0001 s inside
 it. The window integrates mass and uses 0.005 s mechanical checkpoints;
 saved frames remain spaced at 0.01 s. The remaining protocol is quasi-static.
 Restart files retain Prony and contact history across load steps. An unloaded
@@ -144,8 +144,8 @@ This is distinct from constitutive calibration and mesh convergence.
 Tactile PNGs and signed RGB differences are 1280 × 960 at render scale 4; physical
 force fields use the nominal 320 × 240 grid. Physical FOV and marker attachments
 are unchanged. Optical geometry can be reconstructed from saved surface states.
-GIF generation streams frames with a bounded palette sample, so 601 frames do
-not require a full-resolution in-memory atlas.
+GIF generation streams frames with a bounded palette sample, so a long recording
+does not require a full-resolution in-memory atlas.
 
 ## References
 

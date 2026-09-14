@@ -59,7 +59,9 @@ class PlaneMeshTests(unittest.TestCase):
         frames = expected_count(case, 0.05, "sample_interval_s")
         self.assertEqual(len(sampled.trajectory), frames)
         np.testing.assert_array_equal(sampled.specification.solve_times, reference)
-        self.assertEqual(len(original.trajectory), 601)
+        self.assertEqual(
+            len(original.trajectory), expected_count(case, 0.01, "sample_interval_s")
+        )
         self.assertEqual(sampled.solver, original.solver)
         self.assertEqual(sampled.material, original.material)
         self.assertEqual(
@@ -86,7 +88,8 @@ class PlaneMeshTests(unittest.TestCase):
                 for p in case.suite["protocol"]["keyframes"]
             )
         )
-        case.suite["dataset"]["sample_interval_s"] = 0.03
+        # Divides the recording, but is not a whole number of solve intervals.
+        case.suite["dataset"]["sample_interval_s"] = 0.155
         with self.assertRaisesRegex(ValueError, "integer multiple"):
             case.validate()
 

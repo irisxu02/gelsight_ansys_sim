@@ -173,13 +173,26 @@ class PlaneMaterialTests(unittest.TestCase):
         self.assertTrue(shared)
         cases = [PlaneCase.load(p) for p in shared]
         for case in cases:
-            self.assertEqual(len(case.frame_times), 601)
+            protocol = case.suite["protocol"]
+            start, end = protocol["recorded_interval_s"]
+            step = case.suite["dataset"]["sample_interval_s"]
+            slide = [
+                p for p in protocol["phases"] if p["name"] == "slide_at_fixed_compression"
+            ][0]
+            # Every shared case records the same interval at the same spacing.
+            self.assertEqual(case.frame_times[0], start)
+            self.assertEqual(case.frame_times[-1], end)
+            self.assertGreaterEqual(len(case.frame_times), round((end - start) / step) + 1)
             # The preload is the one travel that is still commanded, and it has
             # to stay under the target load on the stiffest specimen.
             self.assertEqual(case.pose(0)["normal_travel_m"], 3e-05)
             self.assertEqual(case.pose(2)["normal_force_n"], 5.0)
-            self.assertEqual(case.pose(6)["x_m"], 0.01)
-            self.assertLess(case.pose(5)["x_m"], 0.01)
+            # The slide covers its declared distance and nothing moves after it.
+            self.assertAlmostEqual(case.pose(end)["x_m"], slide["distance_m"])
+            self.assertAlmostEqual(
+                case.pose(slide["end_time_s"])["x_m"], slide["distance_m"]
+            )
+            self.assertLess(case.pose(slide["end_time_s"] - 0.05)["x_m"], slide["distance_m"])
         for path, data in sources.items():
             setup = data.get("setup")
             if setup is None or setup == "suite.json":

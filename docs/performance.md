@@ -141,7 +141,7 @@ The example queue uses `--render-scale 4`, preserves each
 preset's mesh, and exports only complete, validated runs. See the local `docs/examples/queue-status.json`
 and [detached queue instructions](usage.md#detached-high-resolution-example-queue).
 The seven plane-material cases use a separate solver and export path.
-Their specimen meshes, 601-frame recordings, and transient slide substeps need
+Their specimen meshes, 311-frame recordings, and transient slide substeps need
 separate resource and runtime measurements; sphere timings do not predict their cost. See
 [plane implementation details](plane-material-adapters.md).
 

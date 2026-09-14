@@ -92,8 +92,12 @@ class RenderQueueTests(unittest.TestCase):
         self.assertEqual(blocked, [])
         self.assertTrue(all(j["resolution"] == [1280, 960] for j in jobs))
         self.assertEqual(sum(j["kind"] == "plane" for j in jobs), 7)
+        # Every plane preset shares one protocol, so they share a frame count.
+        expected = len(
+            Config.load(root / "configs/material_plane_slide/soft_rubber.json").trajectory
+        )
         self.assertTrue(
-            all(j["frame_count"] == 601 for j in jobs if j["kind"] == "plane")
+            all(j["frame_count"] == expected for j in jobs if j["kind"] == "plane")
         )
         self.assertEqual(jobs[0]["name"], "sphere_press")
 

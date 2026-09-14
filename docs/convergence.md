@@ -351,7 +351,7 @@ Inertia supplies it. `protocol.transient` turns it on:
 ```json
 "transient": {
   "windows": [
-    {"start_time_s": 2.99, "end_time_s": 3.02,
+    {"start_time_s": 2.29, "end_time_s": 2.32,
      "time_increment_s": 1e-4, "sample_interval_s": 5e-4,
      "reason": "stick-slip release at slide onset"}
   ],
