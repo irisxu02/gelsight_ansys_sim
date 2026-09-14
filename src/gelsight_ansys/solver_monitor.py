@@ -76,3 +76,25 @@ def last_converged(monitor):
     records = read_monitor(monitor)
     last = records[-1]
     return last["load_step"], last["substep"], last["time"]
+
+
+def completed_steps(monitor, is_checkpoint):
+    """Final (load step, substep, solver time) of each load step that finished.
+
+    A restart point is written at the last substep of a load step, so a step
+    interrupted part-way leaves nothing to restart from however many of its
+    substeps converged. The solver's own index says so once MAPDL is open; the
+    monitor says it earlier, which is where a resume has to decide: a step
+    finished if a later one began, or if its last substep landed on the
+    checkpoint it was solving towards.
+    """
+    steps = {}
+    for row in read_monitor(monitor):
+        steps.setdefault(row["load_step"], []).append(row)
+    highest = max(steps)
+    finished = []
+    for step, rows in sorted(steps.items()):
+        last = rows[-1]
+        if step < highest or is_checkpoint(last["time"]):
+            finished.append((step, last["substep"], last["time"]))
+    return finished

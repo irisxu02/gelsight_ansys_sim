@@ -10,7 +10,7 @@ import numpy as np
 from .config import Config
 from .contracts import SurfaceState
 from .metrics import validate_frame
-from .solver_monitor import last_converged
+from .solver_monitor import completed_steps
 
 
 @dataclass(frozen=True)
@@ -270,18 +270,35 @@ def checkpoint_restart(directory, config, summary, last_state, last_time):
     always reach. Everything the solver converged past the last frame is
     replayed through the pipeline's checks before new solving starts.
     """
-    step, substep, solver_time = last_converged(directory / "solver/gel.mntr")
     offset = config.specification.suite["protocol"]["initialization"]["start_time_s"]
+    grid = config.specification.solve_times
+
+    def is_checkpoint(solver_time):
+        at = solver_time + offset
+        return bool(np.min(np.abs(grid - at)) < 1e-6)
+
+    finished = completed_steps(directory / "solver/gel.mntr", is_checkpoint)
+    if not finished:
+        raise ValueError(
+            "No load step finished, so the solver wrote no restart point to "
+            "continue from; the run has to be solved again"
+        )
+    step, substep, solver_time = finished[-1]
     at = solver_time + offset
     # The monitor prints solver time to limited precision and the offset adds
     # rounding; the point is a checkpoint, so name it by the grid.
-    grid = config.specification.solve_times
     nearest = grid[np.argmin(np.abs(grid - at))]
     if abs(nearest - at) < 1e-6:
         at = float(nearest)
     if step < last_state.load_step or at < last_time - 1e-12:
         raise ValueError("The solver's last converged state precedes the last frame")
-    recorded = [r for r in summary.get("recorded_substeps", []) if r["load_step"] == step]
+    # Substeps the pipeline checked past the restart point belong to a load step
+    # the solver will now solve again, so the record drops them rather than
+    # keeping two accounts of the same instants.
+    every = summary.get("recorded_substeps", [])
+    kept = [r for r in every if (r["load_step"], r["substep"]) <= (step, substep)]
+    summary["recorded_substeps"] = kept
+    recorded = [r for r in kept if r["load_step"] == step]
     replay_from = (max(r["substep"] for r in recorded) + 1) if recorded else 1
     if replay_from > substep:
         replay_from = None
@@ -292,6 +309,7 @@ def checkpoint_restart(directory, config, summary, last_state, last_time):
             "load_step": step,
             "substep": substep,
             "replayed_from_substep": replay_from,
+            "discarded_substeps_past_the_point": len(every) - len(kept),
         }
     )
     return PlaneRestart(step, substep, len(summary["frames"]) - 1, at, replay_from)

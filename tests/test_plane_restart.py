@@ -88,7 +88,7 @@ class CheckpointResumeTests(unittest.TestCase):
     """The last converged load step is the one restart point MAPDL always keeps."""
 
     def test_the_monitor_names_the_last_converged_substep(self):
-        from gelsight_ansys.plane_restart import last_converged
+        from gelsight_ansys.solver_monitor import last_converged
 
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "gel.mntr"
@@ -97,6 +97,26 @@ class CheckpointResumeTests(unittest.TestCase):
             path.write_text("banner only\n")
             with self.assertRaises(ValueError):
                 last_converged(path)
+
+    def test_only_a_finished_load_step_can_be_restarted_from(self):
+        """A restart point is written at a load step's last substep, so a step
+        interrupted part-way leaves nothing, however much of it converged."""
+        from gelsight_ansys.solver_monitor import completed_steps
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "gel.mntr"
+            path.write_text(MONITOR)
+            # Step 1 finished because step 3 began. Step 3 is the last one: it
+            # finished only if its final substep reached a checkpoint.
+            self.assertEqual(
+                completed_steps(path, lambda at: False), [(1, 1, 0.02)]
+            )
+            self.assertEqual(
+                completed_steps(path, lambda at: at == 2.04),
+                [(1, 1, 0.02), (3, 7, 2.04)],
+            )
+            # Its converged substep 6 is not a restart point either way.
+            self.assertNotIn(6, [substep for _, substep, _ in completed_steps(path, lambda at: True)])
 
     def test_a_checkpoint_resume_replays_what_was_never_checked(self):
         with tempfile.TemporaryDirectory() as tmp:
