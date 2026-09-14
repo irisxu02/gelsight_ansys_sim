@@ -596,5 +596,35 @@ class PlaneRestartTests(unittest.TestCase):
             self.assertEqual(summary["checkpoint_resumes"][-1]["resumed_at_time_s"], 0.02)
 
 
+class FillFrameTests(unittest.TestCase):
+    """A solved-but-unwritten frame is found by its instant and kept in order."""
+
+    def test_missing_frames_are_those_solved_without_a_recorded_metric(self):
+        from gelsight_ansys.batch.fill_frame import missing_frame_indices
+
+        frames = [{"time_s": 0.0}, {"time_s": 0.1}, {"time_s": 0.3}]
+        times = np.array([0.0, 0.1, 0.2, 0.3, 0.4])
+        # Frame 2 was solved and never recorded; frame 4 was never solved.
+        self.assertEqual(missing_frame_indices(frames, times, 0.3), [2])
+
+    def test_the_substep_is_the_one_converged_at_the_instant(self):
+        from gelsight_ansys.batch.fill_frame import substep_at
+
+        summary = {"recorded_substeps": [
+            {"time_s": 3.195, "load_step": 185, "substep": 96},
+            {"time_s": 3.2, "load_step": 186, "substep": 89},
+        ]}
+        self.assertEqual(substep_at(summary, 3.2), (186, 89))
+        with self.assertRaisesRegex(ValueError, "No converged substep"):
+            substep_at(summary, 3.21)
+
+    def test_a_filled_frame_takes_its_place_by_time(self):
+        from gelsight_ansys.batch.fill_frame import insert_frame
+
+        frames = [{"time_s": 3.15}, {"time_s": 3.25}]
+        self.assertEqual(insert_frame(frames, {"time_s": 3.2}), 1)
+        self.assertEqual([f["time_s"] for f in frames], [3.15, 3.2, 3.25])
+
+
 if __name__ == "__main__":
     unittest.main()
