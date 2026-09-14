@@ -144,3 +144,41 @@ class RunServiceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SolverPortTests(unittest.TestCase):
+    """One fixed port made consecutive jobs collide during teardown."""
+
+    def test_a_port_in_use_is_stepped_over(self):
+        import socket
+
+        from gelsight_ansys.ansys.session import free_port
+
+        with socket.socket() as held:
+            held.bind(("127.0.0.1", 0))
+            held.listen(1)
+            taken = held.getsockname()[1]
+            self.assertEqual(free_port(taken), taken + 1)
+            self.assertNotEqual(free_port(taken), taken)
+
+    def test_a_free_port_is_returned_unchanged(self):
+        import socket
+
+        from gelsight_ansys.ansys.session import free_port
+
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            candidate = probe.getsockname()[1]
+        self.assertEqual(free_port(candidate), candidate)
+
+    def test_no_free_port_says_so(self):
+        import socket
+
+        from gelsight_ansys.ansys.session import free_port
+
+        with socket.socket() as held:
+            held.bind(("127.0.0.1", 0))
+            held.listen(1)
+            taken = held.getsockname()[1]
+            with self.assertRaisesRegex(RuntimeError, "No free solver port"):
+                free_port(taken, attempts=1)

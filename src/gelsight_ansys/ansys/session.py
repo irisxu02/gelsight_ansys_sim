@@ -33,6 +33,28 @@ def gpu_statistics(folder):
     }
 
 
+def free_port(start=50052, attempts=64):
+    """A port nothing is listening on, for this run's own solver.
+
+    Every run took PyMAPDL's one default port, so a solver still shutting down
+    from the previous job kept the next one from binding: MAPDL started, could
+    not serve, and exited while its client waited out its timeout. Two presets
+    in a row were lost that way, each reported as a launch failure with the
+    collision nowhere in it.
+    """
+    import socket
+
+    for port in range(start, start + attempts):
+        with socket.socket() as probe:
+            probe.settimeout(0.5)
+            if probe.connect_ex(("127.0.0.1", port)) != 0:
+                return port
+    raise RuntimeError(
+        f"No free solver port in {start}-{start + attempts - 1}; another "
+        "solver may be running"
+    )
+
+
 def validate_solve(
     converged, output, actual_time, requested_time, load_step, expected_step
 ):
@@ -90,6 +112,7 @@ class AnsysSession:
             jobname="gel",
             nproc=cfg.cores,
             mode="grpc",
+            port=free_port(),
             start_instance=True,
             additional_switches="-smp -acc nvidia -na 1" if cfg.gpu else "-smp",
             license_type=cfg.license_type,
