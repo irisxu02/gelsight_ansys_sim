@@ -93,6 +93,29 @@ cases also need the native adapter libraries. See
 
 Parameter values, physical meanings, expected signatures, and limitations are
 in [Plane material specifications](../materials-and-contact.md#plane-material-specifications).
+
+### Rigid plane, 1 mm slide at 5 N
+
+`plane_rigid_short_slide_5n/` is the first plane slide to run to completion,
+and the run whose measurements set the shipped protocol. It is a diagnostic,
+not a preset: the rigid reference pressed to a commanded 5 N (0.030 mm
+travel-driven preload, then load control), held, slid 1 mm — accelerating into
+5 mm/s over 0.2 s, the whole slide integrated with mass at 0.1 ms — and held to
+4 s. Its resolved `config.json` ships inside the folder; the shipped presets run
+the same physics over a 10 mm slide.
+
+| | |
+|---|---|
+| Frames | 44 over 0–4 s; every 0.05 s through the slide |
+| Travel at 5 N | 0.093 mm |
+| Tangential force at 1 mm | 2.15 N, ratio 0.43 against μ_k = 0.45 |
+| Sliding points at the end of the slide | 1488 of 4080; all re-stick within 0.1 s of the platen stopping |
+| Residual shear locked in during the hold | 2.18 N |
+
+The slide was carried across three checkpoint resumes (t = 3.16, 3.2, 3.3), and
+frame 34 (t = 3.2) was rendered from the result file afterwards; both are
+recorded in `summary.json`. [Convergence](../convergence.md) explains what the
+run established and why the slide has to be integrated with mass.
 All values are illustrative and uncalibrated. The suite fixes the same uniform
 100 kPa, ν=0.49 gel and camera/marker settings across cases.
 

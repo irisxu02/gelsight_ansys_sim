@@ -36,12 +36,22 @@ def export_case(validation, key, output):
     root = validation.parent.resolve()
     source = (root / record["run"]).resolve()
     source.relative_to(root)
+    export_run(source, output / CASES[key])
+
+
+def export_run(source, destination):
+    """Export one complete, passed run as a portable example folder.
+
+    The preset queue reaches this through its validation record; a run made
+    outside the queue - a diagnostic that earned a place among the examples -
+    is exported the same way, by pointing at its directory.
+    """
+    source, destination = Path(source).resolve(), Path(destination)
     summary = json.loads((source / "summary.json").read_text(encoding="utf-8"))
     config = json.loads((source / "config.json").read_text(encoding="utf-8"))
     count = len(config["trajectory"])
     if summary["status"] != "passed" or len(summary["frames"]) != count:
         raise ValueError("A complete successful run is required")
-    destination = output / CASES[key]
     destination.mkdir(parents=True, exist_ok=True)
     paths = [Path(name) for name in FILES]
     plane = (
@@ -113,7 +123,7 @@ def export_case(validation, key, output):
     (destination / "manifest.json").write_text(
         json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
     )
-    print(f"Exported {CASES[key]}: {count} frames, {len(paths)} checked files")
+    print(f"Exported {destination.name}: {count} frames, {len(paths)} checked files")
 
 
 def main():
