@@ -10,7 +10,7 @@ import numpy as np
 from .config import Config
 from .contracts import SurfaceState
 from .metrics import validate_frame
-from .solver_monitor import completed_steps
+from .solver_monitor import restartable_steps
 
 
 @dataclass(frozen=True)
@@ -272,18 +272,13 @@ def checkpoint_restart(directory, config, summary, last_state, last_time):
     """
     offset = config.specification.suite["protocol"]["initialization"]["start_time_s"]
     grid = config.specification.solve_times
-
-    def is_checkpoint(solver_time):
-        at = solver_time + offset
-        return bool(np.min(np.abs(grid - at)) < 1e-6)
-
-    finished = completed_steps(directory / "solver/gel.mntr", is_checkpoint)
-    if not finished:
+    reachable = restartable_steps(directory / "solver/gel.mntr")
+    if not reachable:
         raise ValueError(
-            "No load step finished, so the solver wrote no restart point to "
-            "continue from; the run has to be solved again"
+            "Only one load step was solved, so the solver wrote no restart "
+            "point to continue from; the run has to be solved again"
         )
-    step, substep, solver_time = finished[-1]
+    step, substep, solver_time = reachable[-1]
     at = solver_time + offset
     # The monitor prints solver time to limited precision and the offset adds
     # rounding; the point is a checkpoint, so name it by the grid.

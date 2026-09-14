@@ -78,23 +78,25 @@ def last_converged(monitor):
     return last["load_step"], last["substep"], last["time"]
 
 
-def completed_steps(monitor, is_checkpoint):
-    """Final (load step, substep, solver time) of each load step that finished.
+def restartable_steps(monitor):
+    """Final (load step, substep, solver time) of each load step a restart can reach.
 
-    A restart point is written at the last substep of a load step, so a step
-    interrupted part-way leaves nothing to restart from however many of its
-    substeps converged. The solver's own index says so once MAPDL is open; the
-    monitor says it earlier, which is where a resume has to decide: a step
-    finished if a later one began, or if its last substep landed on the
-    checkpoint it was solving towards.
+    The restart point for a load step is written after its solve returns, so a
+    step is only known to have one once the next step has begun: reaching its
+    own target time is not enough, and a run killed in between leaves a step
+    whose substeps all converged and whose restart file never appeared. Asking
+    for that step is refused by the solver's index, which is the same knowledge
+    arriving too late to act on.
+
+    The cost of being wrong the safe way is one checkpoint; the cost of being
+    wrong the other way is the whole resume.
     """
     steps = {}
     for row in read_monitor(monitor):
         steps.setdefault(row["load_step"], []).append(row)
     highest = max(steps)
-    finished = []
-    for step, rows in sorted(steps.items()):
-        last = rows[-1]
-        if step < highest or is_checkpoint(last["time"]):
-            finished.append((step, last["substep"], last["time"]))
-    return finished
+    return [
+        (step, rows[-1]["substep"], rows[-1]["time"])
+        for step, rows in sorted(steps.items())
+        if step < highest
+    ]

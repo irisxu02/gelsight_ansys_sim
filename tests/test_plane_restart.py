@@ -74,6 +74,8 @@ class RestartIndexTests(unittest.TestCase):
         self.assertNotIn((176, 60), restart_points(FILE_SUMMARY))
 
 
+# Load step 3 is the one a checkpoint resume reaches: its substeps converged
+# and load step 4 began, which is what proves its restart point was written.
 MONITOR = """
   LOAD   SUB-  NO.  NO.    TOTL  INCREMENT    TOTAL         VARIAB 1
   STEP   STEP ATTMP ITER   ITER  TIME/LFACT   TIME/LFACT    MONITOR
@@ -81,6 +83,7 @@ MONITOR = """
      1      1    1     4      4    0.20000E-01  0.20000E-01   0.0000
      3      6    2     3     40    0.10000E-01  2.0300        0.0000
      3      7    1     2     42    0.10000E-01  2.0400        0.0000
+     4      1    1     2     44    0.10000E-01  2.0500        0.0000
 """
 
 
@@ -93,30 +96,30 @@ class CheckpointResumeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "gel.mntr"
             path.write_text(MONITOR)
-            self.assertEqual(last_converged(path), (3, 7, 2.04))
+            self.assertEqual(last_converged(path), (4, 1, 2.05))
             path.write_text("banner only\n")
             with self.assertRaises(ValueError):
                 last_converged(path)
 
-    def test_only_a_finished_load_step_can_be_restarted_from(self):
-        """A restart point is written at a load step's last substep, so a step
-        interrupted part-way leaves nothing, however much of it converged."""
-        from gelsight_ansys.solver_monitor import completed_steps
+    def test_only_a_step_the_solver_moved_past_can_be_restarted_from(self):
+        """The restart point is written after a step's solve returns, so the
+        step is known to have one only once the next step has begun."""
+        from gelsight_ansys.solver_monitor import restartable_steps
 
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "gel.mntr"
             path.write_text(MONITOR)
-            # Step 1 finished because step 3 began. Step 3 is the last one: it
-            # finished only if its final substep reached a checkpoint.
-            self.assertEqual(
-                completed_steps(path, lambda at: False), [(1, 1, 0.02)]
+            # Steps 1 and 3 are reachable because a later step began; step 4 is
+            # the last one, and whether its restart file was written before the
+            # run stopped is exactly what the monitor cannot say.
+            self.assertEqual(restartable_steps(path), [(1, 1, 0.02), (3, 7, 2.04)])
+            # A step is named by its last substep, not an earlier converged one.
+            self.assertNotIn(6, [substep for _, substep, _ in restartable_steps(path)])
+            # One load step alone offers nothing to continue from.
+            path.write_text(
+                "  LOAD SUB\n\n     1      1    1     4      4    0.02  0.02   0.0000\n"
             )
-            self.assertEqual(
-                completed_steps(path, lambda at: at == 2.04),
-                [(1, 1, 0.02), (3, 7, 2.04)],
-            )
-            # Its converged substep 6 is not a restart point either way.
-            self.assertNotIn(6, [substep for _, substep, _ in completed_steps(path, lambda at: True)])
+            self.assertEqual(restartable_steps(path), [])
 
     def test_a_checkpoint_resume_replays_what_was_never_checked(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -674,6 +677,8 @@ class PlaneRestartTests(unittest.TestCase):
                 "  LOAD SUB NO NO TOTL INCREMENT TOTAL V1\n\n"
                 "     1    100    1    2    2    0.02  2.0000  0.0\n"
                 "     2      5    1    2    7    0.004 2.0200  0.0\n"
+                # Load step 3 began, which is what makes 2 restartable.
+                "     3      1    1    2    9    0.004 2.0240  0.0\n"
             )
             summary_path = root / "summary.json"
             summary = json.loads(summary_path.read_text())
