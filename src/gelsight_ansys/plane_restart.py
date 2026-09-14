@@ -42,6 +42,25 @@ NUMERICS_ONLY = frozenset(
 )
 
 
+def described(value):
+    """A setup section without its prose.
+
+    Keys named note, or ending in _note, are documentation: the setups use them
+    to record why a number is what it is, and validate_declared_keys already
+    treats them as free text rather than settings. Editing that prose must not
+    make a half-solved run unresumable - a note once cost a run 244 frames in.
+    """
+    if isinstance(value, dict):
+        return {
+            k: described(v)
+            for k, v in value.items()
+            if k != "note" and not k.endswith("_note")
+        }
+    if isinstance(value, list):
+        return [described(v) for v in value]
+    return value
+
+
 def validate_plane_resume(
     directory,
     config,
@@ -57,7 +76,7 @@ def validate_plane_resume(
     config.validate()
     if not old.is_plane or not config.is_plane:
         raise ValueError("Plane restart requires plane configurations")
-    a, b = old.to_dict(), config.to_dict()
+    a, b = described(old.to_dict()), described(config.to_dict())
     changed = {
         key: [a["solver"][key], b["solver"][key]]
         for key in NUMERICS_ONLY

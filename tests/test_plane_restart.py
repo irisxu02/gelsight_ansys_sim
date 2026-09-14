@@ -447,7 +447,9 @@ class PlaneRestartTests(unittest.TestCase):
                         scoped.specification.case,
                     ),
                 )
-                harder.specification.suite["discretization"]["note"] = "changed"
+                harder.specification.suite["discretization"][
+                    "common_contact_surface_max_edge_m"
+                ] = 0.0002
                 validate_plane_resume(root, harder, acceptance_override=True)
 
     def test_release_keeps_contact_checks_until_boundary_and_keeps_footprint_checks(self):
@@ -844,3 +846,38 @@ class RefillTests(unittest.TestCase):
         self.assertEqual(missing_frame_indices(frames, np.array([0.0, 0.01]), 0.01), [])
         kept = [f for f in frames if abs(f["time_s"] - 0.01) > 1e-9]
         self.assertEqual(missing_frame_indices(kept, np.array([0.0, 0.01]), 0.01), [1])
+
+
+class DocumentationIsNotPhysicsTests(unittest.TestCase):
+    """Prose in a setup records why a number is what it is; it is not a setting."""
+
+    def test_editing_a_note_does_not_make_a_run_unresumable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config, _, _ = PlaneRestartTests().fixture(root)
+            continued = release_config(config)
+            validate_plane_resume(root, continued)
+            annotated = deepcopy(continued)
+            suite = annotated.specification.suite
+            suite["solver"]["note"] = "measured on 14 September; see the run log"
+            suite["contact_numerics"]["pinball_note"] = "rewritten"
+            suite["discretization"]["note"] = "rewritten"
+            annotated = annotated.with_plane_sampling()
+            self.assertNotEqual(
+                suite["solver"]["note"], continued.specification.suite["solver"]["note"]
+            )
+            validate_plane_resume(root, annotated)
+
+    def test_a_setting_beside_the_prose_still_stops_the_resume(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config, _, _ = PlaneRestartTests().fixture(root)
+            continued = release_config(config)
+            changed = deepcopy(continued)
+            changed.specification.suite["discretization"]["note"] = "rewritten"
+            changed.specification.suite["discretization"][
+                "common_contact_surface_max_edge_m"
+            ] = 0.0002
+            changed = changed.with_plane_sampling()
+            with self.assertRaisesRegex(ValueError, "mechanical setup"):
+                validate_plane_resume(root, changed)
