@@ -66,10 +66,29 @@ class RenderQueueTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "does not match"):
                 audit(folder, preset, render_scale=4)
 
+    def test_a_skipped_preset_is_recorded_and_not_run(self):
+        import io
+        from contextlib import redirect_stdout
+
+        from gelsight_ansys.batch.render_queue import main, mark_skipped
+
+        with redirect_stdout(io.StringIO()) as out:
+            main(["--work", "/tmp/q", "--examples", "/tmp/e", "--list-only",
+                  "--skip", "sphere_press"])
+        listed = json.loads(out.getvalue())["jobs"]
+        skipped = next(j for j in listed if j["name"] == "sphere_press")
+        self.assertEqual(skipped["status"], "skipped")
+        self.assertTrue(all(j["status"] == "pending" for j in listed if j["name"] != "sphere_press"))
+        # A pass stays a pass: skipping never demotes exported work.
+        jobs = [{"name": "a", "status": "passed"}, {"name": "b", "status": "failed", "error_type": "X"}]
+        mark_skipped(jobs, ["a", "b"])
+        self.assertEqual([j["status"] for j in jobs], ["passed", "skipped"])
+        self.assertNotIn("error_type", jobs[1])
+
     def test_plane_and_indenter_configs_are_all_discovered(self):
         root = Path(__file__).resolve().parents[1]
         jobs, blocked = discover(root / "configs", 4)
-        self.assertEqual(len(jobs), 15)
+        self.assertEqual(len(jobs), 14)
         self.assertEqual(blocked, [])
         self.assertTrue(all(j["resolution"] == [1280, 960] for j in jobs))
         self.assertEqual(sum(j["kind"] == "plane" for j in jobs), 7)

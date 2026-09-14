@@ -16,7 +16,6 @@ file schema, units, transforms, and supported material/motion combinations.
 
 Runnable presets:
 
-- [Pyramid slide](../../configs/imported_pyramid_slide.json): 0.3 mm indentation, 1 mm slide, and release.
 - [Rigid block press](../../configs/imported_rigid_press.json): 0.3 mm indentation and release.
 - [Soft block press](../../configs/imported_soft_press.json): 50 kPa Neo-Hookean hex volume.
 

@@ -208,13 +208,11 @@ Try the supplied source meshes:
 ```bash
 python scripts/run_simulation.py run --config configs/imported_rigid_press.json --dry-run
 python scripts/run_simulation.py run --config configs/imported_soft_press.json --render-scale 4
-python scripts/run_simulation.py run --config configs/imported_pyramid_slide.json --render-scale 4
 ```
 
 The two press examples indent a 3 × 3 × 2 mm block by 0.3 mm and release.
-The [pyramid slide](../configs/imported_pyramid_slide.json) presses a downward tip
-0.3 mm, slides 1 mm, and releases. All three share the uniform gel and camera
-defaults; the soft block uses 50 kPa Neo-Hookean elasticity. See [example motions](examples/README.md#imported-object-examples)
+Both share the uniform gel and camera defaults; the soft block uses 50 kPa
+Neo-Hookean elasticity. See [example motions](examples/README.md#imported-object-examples)
 and [source assets](../assets/meshes/README.md). Imported geometry
 needs numerical validation for each mesh and contact/loading combination;
 [the licensed import check](verification.md#mesh-import-validation) compares

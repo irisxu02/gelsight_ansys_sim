@@ -77,7 +77,7 @@ def main(argv=None):
         assert max(f["normal_force_n"] for f in frames) > 0.001, (
             "Insufficient contact force"
         )
-        if name in ("slide", "rough", "imported_pyramid"):
+        if name in ("slide", "rough"):
             assert max(abs(f["force_on_gel_n"][0]) for f in frames) > 0.005, (
                 "Missing shear response"
             )

@@ -126,15 +126,15 @@ See [configuration and supported options](docs/usage.md).
 ### Custom object meshes
 
 Use your own object geometry through the same config-driven workflow. Try the
-included STL pyramid sliding over the gel:
+included STL block pressed into the gel:
 
 ```bash
-python scripts/run_simulation.py run --config configs/imported_pyramid_slide.json --render-scale 4
+python scripts/run_simulation.py run --config configs/imported_rigid_press.json --render-scale 4
 ```
 
-This example presses the pyramid tip 0.3 mm, slides 1 mm, and releases. To use
-another object, copy the preset and change its mesh file, units, placement,
-material, and trajectory.
+This example presses the block 0.3 mm and releases. To use another object,
+copy the preset and change its mesh file, units, placement, material, and
+trajectory.
 Rigid objects accept STL, OBJ, or JSON surfaces; deformable objects require a
 JSON hex volume with named contact and grip regions.
 [Use your own mesh](docs/usage.md#use-your-own-object-mesh) ·
@@ -215,7 +215,6 @@ Use them as starting points for your own geometry.
 |---|---|---|
 | [imported_rigid_press](configs/imported_rigid_press.json) | Indent and release | Rigid block imported from STL |
 | [imported_soft_press](configs/imported_soft_press.json) | Indent and release | Deformable 50 kPa block imported from a JSON hex mesh |
-| [imported_pyramid_slide](configs/imported_pyramid_slide.json) | Indent, slide 1 mm, release | Imported rigid STL pyramid; Coulomb friction μ = 0.5 |
 
 ### Material comparison presets
 

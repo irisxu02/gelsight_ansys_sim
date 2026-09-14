@@ -39,7 +39,7 @@ resolve asperities and does not use ANSYS's no-slip rough-contact option.
 
 ## Imported object examples
 
-These presets use the [included block and pyramid meshes](../../assets/meshes/README.md)
+These presets use the [included block meshes](../../assets/meshes/README.md)
 with the standard uniform gel, camera, and marker layout. Geometry, object
 material, friction, and trajectory are independent config fields.
 
@@ -47,26 +47,23 @@ material, friction, and trajectory are independent config fields.
 |---|---|---|---|
 | [Imported rigid press](../../configs/imported_rigid_press.json) | Press 0.3 mm and release; 6 poses | Rigid STL surface, 12 triangles | `imported_rigid` |
 | [Imported soft press](../../configs/imported_soft_press.json) | Press 0.3 mm and release; 6 poses | 50 kPa Neo-Hookean JSON volume, 48 hex elements | `imported_soft` |
-| [Imported pyramid slide](../../configs/imported_pyramid_slide.json) | Press 0.3 mm, slide 1 mm, release; 17 poses | Rigid STL pyramid, 6 triangles | `imported_pyramid` |
 
-All three use Coulomb friction μ = 0.5. The soft volume has named bottom contact
+Both use Coulomb friction μ = 0.5. The soft volume has named bottom contact
 faces and top grip nodes. Its top grip follows the prescribed translation.
-The pyramid slide holds indentation fixed while advancing in x, then lifts at the final
-x position. Validation checks shear response and recovery after release.
-The block measures 3 × 3 × 2 mm. The square pyramid has a 6 × 6 mm base,
-3 mm height, and a downward-facing tip; its six facets describe its exact shape.
-Tip pressure and the small contact patch require a gel-refinement comparison
-before quantitative interpretation.
+Validation checks recovery after release. The block measures 3 × 3 × 2 mm.
 
 ```bash
-python scripts/run_simulation.py run --config configs/imported_pyramid_slide.json --render-scale 4 --output outputs/pyramid_slide
+python scripts/run_simulation.py run --config configs/imported_rigid_press.json --render-scale 4 --output outputs/block_press
 ```
 
 Use the table's validation keys with `validate_simulation.py` and
-`export_examples.py`. The detached queue includes all three presets and exports
+`export_examples.py`. The detached queue includes both presets and exports
 checked PNGs and GIFs under `docs/examples/<config_name>/`.
 These source meshes demonstrate import and fixture handling; their resolution
-does not establish contact convergence.
+does not establish contact convergence. A sharp feature such as the supplied
+pyramid's tip needs a gel refinement comparison before it can be slid: on the
+uniform mesh the tip is carried by one or two elements and the solve is lost
+within the first millimetre.
 
 See [use your own object mesh](../usage.md#use-your-own-object-mesh) for the workflow,
 and [mesh formats and placement](../configuration.md#custom-object-meshes) for the

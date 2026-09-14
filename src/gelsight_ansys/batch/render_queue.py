@@ -91,6 +91,14 @@ def discover(configs, scale):
     return jobs, blocked
 
 
+def mark_skipped(jobs, names):
+    """Record the presets the operator left out of this queue."""
+    for job in jobs:
+        if job["name"] in names and job.get("status") != "passed":
+            job.update(status="skipped", stage=None, reason="Skipped at the operator's request")
+            job.pop("error_type", None)
+
+
 def retire_removed_jobs(state, current_jobs):
     """Preserve history without resuming presets removed from the catalog."""
     current = {job["name"] for job in current_jobs}
@@ -310,9 +318,21 @@ def main(argv=None):
         help="Reuse current, already-audited exports from an earlier queue",
     )
     parser.add_argument("--retry-failed", action="store_true")
+    parser.add_argument(
+        "--skip",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="Leave this preset out of the queue; repeatable. It is recorded as "
+        "skipped, not failed, and nothing is exported for it.",
+    )
     parser.add_argument("--list-only", action="store_true")
     args = parser.parse_args(argv)
     jobs, blocked = discover(ROOT / "configs", args.render_scale)
+    unknown = set(args.skip) - {job["name"] for job in jobs}
+    if unknown:
+        parser.error("Unknown preset(s) to skip: " + ", ".join(sorted(unknown)))
+    mark_skipped(jobs, args.skip)
     if args.list_only:
         print(json.dumps({"jobs": jobs, "blocked": blocked}, indent=2))
         return 0
@@ -347,6 +367,7 @@ def main(argv=None):
             }
         )
         retire_removed_jobs(state, jobs)
+        mark_skipped(state["jobs"], args.skip)
         if state["render_scale"] != args.render_scale:
             raise ValueError(
                 "Use a new queue directory when changing rendering resolution"
@@ -379,7 +400,7 @@ def main(argv=None):
         atomic_json(work / "process.json", {"pid": os.getpid(), "started_utc": now()})
         publish_status(work, destination, state)
         for job in state["jobs"]:
-            if job["status"] == "passed" or (
+            if job["status"] in ("passed", "skipped") or (
                 job["status"] == "failed" and not args.retry_failed
             ):
                 continue

@@ -8,7 +8,6 @@ INDENTER_CASES = {
     "rough": "rough_sphere_slide",
     "imported_rigid": "imported_rigid_press",
     "imported_soft": "imported_soft_press",
-    "imported_pyramid": "imported_pyramid_slide",
 }
 PLANE_CASES = {
     "plane_rigid_reference_press_slide": "rigid_reference",

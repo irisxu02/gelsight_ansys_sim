@@ -42,7 +42,7 @@ GPU checks. [Solver lifecycle](architecture.md#solver-lifecycle-and-contact-resu
 
 ## Use your own object mesh
 
-Start from [`imported_pyramid_slide.json`](../configs/imported_pyramid_slide.json)
+Start from [`imported_rigid_press.json`](../configs/imported_rigid_press.json)
 for an STL/OBJ/JSON rigid surface, or
 [`imported_soft_press.json`](../configs/imported_soft_press.json) for a deformable
 JSON hex volume. Both use the same `run --config` command as generated shapes.
