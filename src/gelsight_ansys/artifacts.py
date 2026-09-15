@@ -413,7 +413,13 @@ def build_report(directory, config, metrics):
     contact_description = f"friction coefficient {config.indenter.friction:g}"
     if config.is_plane:
         bulk = config.specification.bulk
-        object_description = f"finite slab; {bulk['model']}"
+        cylinder = config.specification.cylinder
+        object_description = (
+            f"rigid cylinder, {cylinder['diameter_m'] * 1000:g} mm diameter x "
+            f"{cylinder['length_m'] * 1000:g} mm along {cylinder['axis']}"
+            if cylinder
+            else f"finite slab; {bulk['model']}"
+        )
         if "young_pa" in bulk:
             object_description += f"; E={bulk['young_pa'] / 1000:g} kPa"
         contact = config.specification.case["contact"]

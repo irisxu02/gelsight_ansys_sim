@@ -273,7 +273,13 @@ class Config:
 
     @property
     def is_plane(self):
-        return self.indenter.shape == "plane"
+        """Whether the finite-target adapter drives this run.
+
+        A flat slab and a cylinder differ in the shape of the target surface and
+        in nothing else: both are driven by a physical-time suite, solved by the
+        same adapter, and read back by the same result reader.
+        """
+        return self.indenter.shape in ("plane", "cylinder")
 
     def suite_updated(self, **sections):
         """Restate suite settings a runtime override changed.
@@ -500,8 +506,10 @@ class Config:
             if value is not None:
                 positive(value, f"indenter.{key}")
         positive(self.indenter.tangential_stiffness_factor, "tangential_stiffness_factor")
-        if self.indenter.shape not in ("sphere", "flat", "plane", "mesh"):
-            raise ValueError("indenter.shape must be sphere, flat, plane, or mesh")
+        if self.indenter.shape not in ("sphere", "flat", "plane", "cylinder", "mesh"):
+            raise ValueError(
+                "indenter.shape must be sphere, flat, plane, cylinder, or mesh"
+            )
         for key in (
             "radius_m",
             "half_width_m",

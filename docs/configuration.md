@@ -125,7 +125,8 @@ is implemented for every mechanical adapter.
 | `sphere` | Rigid, linear elastic, Neo-Hookean, or Mooney–Rivlin | Constant Coulomb friction; rigid rotation and translation; deformable translation |
 | `flat` | Rigid | Constant Coulomb friction; rotation and translation |
 | `mesh` | Rigid surface or linear/Neo-Hookean/Mooney–Rivlin hex volume | Constant Coulomb friction; rigid translation/z twist; deformable translation |
-| `plane` | Rigid, Neo-Hookean with optional Prony relaxation, Ogden hyperfoam, or effective fabric | Constant or exponential velocity-dependent Coulomb friction, directional friction, roughness, and reversible adhesion; configured normal travel and x sliding |
+| `plane` | Rigid, Neo-Hookean with optional Prony relaxation, Ogden hyperfoam, or effective fabric | Constant or exponential velocity-dependent Coulomb friction, directional friction, roughness, and reversible adhesion; configured normal travel or load, sliding along one axis |
+| `cylinder` | Rigid | As `plane`, minus a deformable body; the target is the cylinder's lateral surface |
 
 `plane` means a finite slab with a top-face fixture. Its shared setup uses
 physical-time preload and press/hold/slide/hold recording with coverage checks.

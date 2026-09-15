@@ -174,6 +174,25 @@ retaining the default mechanical checkpoints. Mechanical time steps and object
 mesh resolution can be benchmarked separately.
 [Sampling and performance controls](docs/usage.md#mechanical-steps-and-saved-frames)
 
+### Cylinders under a commanded load
+
+Press a rigid cylinder onto the gel at a fixed 4 N, hold it, and slide 2 mm
+along its own axis with the load maintained:
+
+```bash
+python scripts/run_simulation.py run --config configs/cylinder_press_slide/cylinder_20mm.json --render-scale 4
+```
+
+The two shipped diameters, 100 mm and 20 mm, press at the same load rather than
+the same travel, so what separates them is curvature alone: the wide cylinder
+spreads 4 N over most of the imaged region while the narrow one concentrates it
+in a band a few millimetres across. Travel is a result to read, not a setting.
+Copy a preset and change `object.geometry` for another diameter, length or axis;
+`configs/cylinder_press_slide/suite.json` holds the sensor, protocol and numerics
+the cases share.
+[Cylinder geometry](docs/configuration.md#cylinders) ·
+[Load control](docs/plane-material-adapters.md)
+
 ### Mesh and GPU options
 
 General contact presets use a uniform 36 × 30 × 8 gel mesh. Add

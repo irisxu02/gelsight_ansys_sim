@@ -112,12 +112,14 @@ def resolve_simulation(data, base_directory=None):
         raise ConfigurationError("object must contain geometry and material")
     geometry = deepcopy(obj["geometry"])
     shape = geometry.get("shape")
-    if shape not in ("sphere", "flat", "plane", "mesh"):
+    if shape not in ("sphere", "flat", "plane", "cylinder", "mesh"):
         raise ConfigurationError(
-            "Supported object shapes are sphere, flat, plane, and mesh"
+            "Supported object shapes are sphere, flat, plane, cylinder, and mesh"
         )
     material = resolve_material(obj["material"], base_directory)
-    if shape == "plane":
+    # A plane and a cylinder are the same finite-target adapter: a rigid or
+    # deformable body pressed onto the gel under a physical-time protocol.
+    if shape in ("plane", "cylinder"):
         return resolve_plane(data, geometry, material, base_directory)
     if "setup" in data:
         raise ConfigurationError(
@@ -206,7 +208,14 @@ def resolve_simulation(data, base_directory=None):
 def resolve_plane(data, geometry, material, base_directory):
     from .plane_config import PlaneCase
 
-    if set(geometry) != {"shape", "width_m", "length_m", "thickness_m"}:
+    if geometry["shape"] == "cylinder":
+        if set(geometry) != {"shape", "diameter_m", "length_m", "axis"}:
+            raise ConfigurationError(
+                "Cylinder geometry requires diameter_m, length_m, and axis"
+            )
+        if material["model"] != "rigid":
+            raise ConfigurationError("Only a rigid cylinder target is implemented")
+    elif set(geometry) != {"shape", "width_m", "length_m", "thickness_m"}:
         raise ConfigurationError(
             "Plane geometry requires width_m, length_m, and thickness_m"
         )
@@ -372,12 +381,16 @@ def plane_contact_damping(rules):
 def plane_indenter(specification):
     """The contact definition the plane adapter reads, derived from the suite."""
     rules = specification.suite["contact_numerics"]
-    slab = specification.suite["specimen"]
+    cylinder = specification.cylinder
+    half_width, half_length = specification.target_half_extents()
     law = specification.case["contact"]["friction"]
     return dict(
-        shape="plane",
-        half_width_m=slab["width_m"] / 2,
-        half_length_m=slab["length_m"] / 2,
+        shape="cylinder" if cylinder else "plane",
+        # The footprint the target presents to the gel, which for a cylinder is
+        # the patch cut from its lateral surface rather than the whole body.
+        half_width_m=half_width,
+        half_length_m=half_length,
+        **({"radius_m": cylinder["diameter_m"] / 2} if cylinder else {}),
         clearance_m=0.0,
         friction=law.get("x", law)["kinetic_coefficient"],
         **{field: rules[key] for key, field in CONTACT_RULE_FIELDS.items() if key != "symmetric_pair"},

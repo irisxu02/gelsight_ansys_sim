@@ -221,6 +221,11 @@ after the window. Contact/pilot and raster checks remain active on saved frames.
 For load control, the normal pilot comparison checks the delivered contact load
 against the commanded load.
 
+Geometric coverage and edge margin are each recorded twice, over the whole outer
+sensor surface and over the nodes carrying load; `contact_acceptance.edge_margin_scope`
+says which pair the thresholds are applied to, and both are in every frame either
+way. See [what the acceptance rules speak for](convergence.md#a-target-that-is-not-meant-to-cover-the-sensor).
+
 Every recorded plane substep also undergoes geometric coverage and edge-margin
 checks, required contact checks when the protocol demands contact, and the
 contact/backing check outside inertia windows. Substeps inside inertia windows

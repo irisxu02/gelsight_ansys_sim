@@ -88,17 +88,27 @@ class RenderQueueTests(unittest.TestCase):
     def test_plane_and_indenter_configs_are_all_discovered(self):
         root = Path(__file__).resolve().parents[1]
         jobs, blocked = discover(root / "configs", 4)
-        self.assertEqual(len(jobs), 14)
+        self.assertEqual(len(jobs), 16)
         self.assertEqual(blocked, [])
         self.assertTrue(all(j["resolution"] == [1280, 960] for j in jobs))
-        self.assertEqual(sum(j["kind"] == "plane" for j in jobs), 7)
-        # Every plane preset shares one protocol, so they share a frame count.
-        expected = len(
-            Config.load(root / "configs/material_plane_slide/soft_rubber.json").trajectory
-        )
-        self.assertTrue(
-            all(j["frame_count"] == expected for j in jobs if j["kind"] == "plane")
-        )
+        self.assertEqual(sum(j["kind"] == "plane" for j in jobs), 9)
+        # Presets of one suite share its schedule, so they share a frame count.
+        # The two suites no longer agree: the cylinders slide 4 mm where the
+        # slabs slide 2 mm, which is 0.4 s and 40 frames more.
+        for preset, count in (
+            ("material_plane_slide/soft_rubber", 311),
+            ("cylinder_press_slide/cylinder_20mm", 351),
+        ):
+            expected = len(Config.load(root / f"configs/{preset}.json").trajectory)
+            self.assertEqual(expected, count)
+            family = preset.split("/")[0]
+            same = [
+                j
+                for j in jobs
+                if j["kind"] == "plane" and j["config"].startswith(family)
+            ]
+            self.assertTrue(same)
+            self.assertTrue(all(j["frame_count"] == expected for j in same))
         self.assertEqual(jobs[0]["name"], "sphere_press")
 
     def test_removed_presets_cannot_resume_and_history_is_preserved(self):

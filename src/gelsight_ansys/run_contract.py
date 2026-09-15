@@ -18,7 +18,7 @@ def is_plane_record(config):
     """Whether a saved configuration describes a plane run."""
     return (
         config.get("config_kind") == "resolved_material_plane_run"
-        or (config.get("indenter") or {}).get("shape") == "plane"
+        or (config.get("indenter") or {}).get("shape") in ("plane", "cylinder")
     )
 
 

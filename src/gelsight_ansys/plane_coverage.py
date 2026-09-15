@@ -60,12 +60,22 @@ class ContactCoverage:
         )
         self.gauss_to_corner = np.linalg.inv(shape_gp)
         self.region = self.gated_region()
+        # Reject an unreadable setting once, here, rather than on every substep.
+        self.scope
         self.face, self.bin = records[:, 0].astype(int), records[:, 1].astype(int)
         u, v = records[:, 2], records[:, 3]
         self.weights = records[:, 4]
         self.N = np.column_stack(((1 - u) * (1 - v), u * (1 - v), u * v, (1 - u) * v))
         self.du = np.column_stack((v - 1, 1 - v, v, -v))
         self.dv = np.column_stack((u - 1, -u, u, 1 - u))
+
+    @property
+    def scope(self):
+        """Which sensor nodes the geometry acceptance thresholds speak for."""
+        name = self.rules.get("edge_margin_scope", "all_sensor_nodes")
+        if name not in ("all_sensor_nodes", "loaded_sensor_nodes"):
+            raise ValueError(f"Unknown edge margin scope: {name}")
+        return name
 
     def gated_region(self):
         """Which bins the activity requirement is allowed to fail on.
@@ -137,9 +147,9 @@ class ContactCoverage:
                 weights=weights.ravel(),
                 minlength=np.prod(self.shape),
             ).reshape(self.shape)
-        slab = self.case.suite["specimen"]
-        left, right = pose.x_m - slab["width_m"] / 2, pose.x_m + slab["width_m"] / 2
-        bottom, top = pose.y_m - slab["length_m"] / 2, pose.y_m + slab["length_m"] / 2
+        half_width, half_length = self.case.target_half_extents()
+        left, right = pose.x_m - half_width, pose.x_m + half_width
+        bottom, top = pose.y_m - half_length, pose.y_m + half_length
         if object_mesh is not None:
             original = object_mesh.coordinates
             current = original + object_displacement
@@ -161,7 +171,16 @@ class ContactCoverage:
         margins = np.minimum.reduce(
             (xy[:, 0] - left, right - xy[:, 0], xy[:, 1] - bottom, top - xy[:, 1])
         )
-        active = loads > self.rules["macroscopic_contact_bins"]["minimum_bin_force_n"]
+        threshold = self.rules["macroscopic_contact_bins"]["minimum_bin_force_n"]
+        # A target smaller than the sensor - a cylinder lying across it - cannot
+        # cover the gel and is not meant to. What still has to hold is that the
+        # load it does carry stays well inside the target, which is the same
+        # statement measured where there is load to measure it on. Both are
+        # recorded whichever one the setup gates on, so neither key changes its
+        # meaning between runs. Repulsive contact pushes the gel along -z.
+        carrying = -np.asarray(state.contact_force_n)[:, 2] > threshold
+        loaded = margins[carrying] if carrying.any() else margins
+        active = loads > threshold
         record = {
             "minimum_bin_repulsive_force_n": float(loads.min()),
             "total_repulsive_force_n": float(loads.sum()),
@@ -179,15 +198,42 @@ class ContactCoverage:
             ),
             "minimum_plane_edge_margin_m": float(margins.min()),
             "geometric_footprint_coverage_fraction": float(np.mean(margins >= 0)),
+            "loaded_edge_margin_m": float(loaded.min()),
+            "loaded_footprint_coverage_fraction": float(np.mean(loaded >= 0)),
+            "loaded_sensor_node_count": int(carrying.sum()),
+            "edge_margin_scope": self.scope,
             "bin_count": int(loads.size),
             "pressure_integration": "bilinear reconstruction of ANSYS Gauss pressure, integrated on each material-bin intersection",
-            "footprint_bound": "conservative rectangle inside the current specimen boundary",
+            "footprint_bound": "conservative rectangle inside the current target footprint, which for a curved target is the patch cut from it",
         }
         if "repulsive_pressure" in details:
             record["pressure_integration"] = (
                 "ANSYS detection-point repulsive pressure times integration area, binned at fixed sensor material coordinates"
             )
         return record, loads
+
+    def geometry_gate(self, record):
+        """The margin and coverage the acceptance thresholds speak for.
+
+        A setup that declares a target smaller than the sensor gates on what the
+        load sits inside; every other setup gates on the whole surface, as they
+        always have. Records written before either key existed carry only the
+        whole-surface pair, which is what they were judged on.
+        """
+        if self.scope == "loaded_sensor_nodes":
+            return (
+                record.get("loaded_edge_margin_m", record["minimum_plane_edge_margin_m"]),
+                record.get(
+                    "loaded_footprint_coverage_fraction",
+                    record["geometric_footprint_coverage_fraction"],
+                ),
+                "the loaded region",
+            )
+        return (
+            record["minimum_plane_edge_margin_m"],
+            record["geometric_footprint_coverage_fraction"],
+            "the sensor",
+        )
 
     def validate(self, record, *, require_contact=True):
         r = self.rules
@@ -206,12 +252,10 @@ class ContactCoverage:
             <= r["minimum_total_repulsive_normal_force_n"]
         ):
             failures.append("insufficient repulsive normal force")
-        if (
-            record["geometric_footprint_coverage_fraction"]
-            < r["minimum_geometric_footprint_coverage_fraction"]
-        ):
-            failures.append("specimen does not cover the deformed sensor")
-        if record["minimum_plane_edge_margin_m"] < r["minimum_plane_edge_margin_m"]:
-            failures.append("insufficient specimen edge margin")
+        margin, coverage, scope = self.geometry_gate(record)
+        if coverage < r["minimum_geometric_footprint_coverage_fraction"]:
+            failures.append(f"specimen does not cover {scope}")
+        if margin < r["minimum_plane_edge_margin_m"]:
+            failures.append(f"insufficient specimen edge margin over {scope}")
         if failures:
             raise RuntimeError("Plane contact acceptance failed: " + ", ".join(failures))

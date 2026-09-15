@@ -140,7 +140,7 @@ class AnsysPlane(AnsysSession):
         clearance = c.indenter.clearance_m
         self.pilot = len(mesh.coordinates) + 1
         self.initial_pilot = np.array(
-            [0.0, 0.0, clearance + self.case.suite["specimen"]["thickness_m"]]
+            [0.0, 0.0, self.case.target_reference_height(clearance)]
         )
         if c.indenter.deformable:
             self.object_mesh = slab_mesh(

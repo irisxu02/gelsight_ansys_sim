@@ -245,7 +245,14 @@ class PlaneNumericsTests(unittest.TestCase):
         mesh = gel_mesh(compact.specification, None)
         points = mesh.coordinates[mesh.surface_nodes]
         coverage = ContactCoverage(compact.specification, points, mesh.surface_quads)
-        state = type("S", (), {"position_m": points})()
+        state = type(
+            "S",
+            (),
+            {
+                "position_m": points,
+                "contact_force_n": np.tile([0.0, 0.0, -0.01], (len(points), 1)),
+            },
+        )()
         faces = len(mesh.surface_quads)
         details = {
             "pressure": np.full((faces, 4), 1e4),

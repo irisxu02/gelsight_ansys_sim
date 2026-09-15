@@ -298,6 +298,32 @@ def rerender(source, output, backend=None, progress=print, render_mode=None):
     return directory, summary
 
 
+def matched_render_scale(config, original):
+    """Render a continued run at the scale it was already solved at.
+
+    A --config override states the protocol to carry on with, not the resolution
+    to draw it at: the run being continued has a camera, its saved frames were
+    rendered through that camera, and the restart rules rightly refuse a resume
+    that changes it. Restating the scale on the command line is a trap.
+
+    The scale is the run's own camera against the nominal one its setup declares,
+    which is what a resolved plane configuration means by it. Deriving it from
+    the two configs instead would read any genuine difference of camera - a
+    different sensor, a different field of view - as a scale, and silently let a
+    resume past the guard that exists to catch exactly that.
+    """
+    if not original.is_plane or config.camera == original.camera:
+        return config
+    nominal = original.specification.suite["sensor"]["camera"]["width_px"]
+    scale, remainder = divmod(original.camera.width_px, nominal)
+    if remainder:
+        raise ValueError(
+            f"The run's {original.camera.width_px} px camera is not a whole "
+            f"multiple of the {nominal} px its setup declares"
+        )
+    return config.with_render_scale(scale)
+
+
 def resume_run(
     source,
     output,
@@ -316,7 +342,7 @@ def resume_run(
 
     source = Path(source)
     original = Config.load(source / "config.json", validate=False)
-    config = original if config is None else config
+    config = original if config is None else matched_render_scale(config, original)
     if original.is_plane:
         from .plane_restart import validate_plane_resume
 

@@ -1,0 +1,59 @@
+{
+  "schema_version": 3,
+  "config_kind": "contact_simulation",
+  "name": "cylinder_20mm_press_slide",
+  "calibrated": false,
+  "setup": "suite.json",
+  "object": {
+    "geometry": {
+      "shape": "cylinder",
+      "diameter_m": 0.02,
+      "length_m": 0.05,
+      "axis": "y"
+    },
+    "material": {
+      "case": "../materials/rigid.json"
+    }
+  },
+  "surface": {
+    "model": "smooth"
+  },
+  "contact": {
+    "friction": {
+      "model": "coulomb_exponential_velocity_decay",
+      "static_coefficient": 0.6,
+      "kinetic_coefficient": 0.45,
+      "decay_velocity_m_s": 0.001,
+      "coefficient_law": "mu(v) = mu_k + (mu_s - mu_k) * exp(-abs(v) / decay_velocity_m_s)",
+      "anisotropy": "isotropic",
+      "pair": "specimen_surface_against_shared_sensor_surface"
+    },
+    "adhesion": {
+      "model": "none"
+    }
+  },
+  "status": "implemented_experimental",
+  "runnable_with_current_cli": true,
+  "parameter_origin": "Illustrative synthetic values; a rigid reference geometry, not a named commercial material.",
+  "material_label": "Rigid smooth cylinder, 20 mm diameter",
+  "required_capabilities": [
+    "curved_rigid_target",
+    "prescribed_normal_force_control"
+  ],
+  "model_notes": [
+    "At 4 N the band under a 20 mm cylinder is a few millimetres wide, so the same load produces a far higher peak pressure and a much sharper curvature signature than the 100 mm case.",
+    "The patch is capped at the setup's 60 degree wrap, 8.7 mm either side of the axis. Beyond that the surface stands 5 mm above first touch, further than the contact pinball, so the truncation removes only facets that could never touch.",
+    "Reference geometry and interface for controlled comparisons; it is not a specific metal or plastic."
+  ],
+  "expected_observables": [
+    "contact_band_width",
+    "peak_contact_pressure_pa",
+    "tangential_force_n",
+    "marker_displacement_m"
+  ],
+  "calibration_measurements": [
+    "normal_load_vs_travel_for_this_diameter",
+    "static_and_kinetic_friction_at_multiple_loads_and_speeds"
+  ],
+  "entry_point": "gelsight-ansys run --config <case.json>"
+}

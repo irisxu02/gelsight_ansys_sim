@@ -1,0 +1,492 @@
+{
+  "config_kind": "material_plane_suite",
+  "schema_version": 2,
+  "name": "rigid_cylinder_press_slide",
+  "status": "implemented_experimental",
+  "runnable_with_current_cli": true,
+  "calibrated": false,
+  "units": "SI",
+  "description": "A rigid cylinder lies across the sensor with its axis along y, is pressed onto the gel under a commanded 4 N load, held, slid 2 mm along its own axis at 5 mm/s with the load maintained, and held again. The slide is integrated with mass. Contact is a band under the cylinder, not the whole footprint, so acceptance is stated for the band.",
+  "config_contract": {
+    "version": "proposed_v1",
+    "path_base": "directory_containing_suite_json",
+    "composition": "Simulation inputs select object geometry, material case and parameter overrides, surface, and contact; this setup supplies shared sensor, fixture, protocol, and numerics.",
+    "current_loader_behavior": "Shared setup only; run a contact_simulation config with run --config. The object geometry selects the mechanical adapter.",
+    "sensor_baseline": "The current checkout uses a uniform gel; these configs preserve that baseline and do not restore a separate coating.",
+    "unsupported_capability_policy": "reject_before_launch",
+    "parameter_policy": "Values are illustrative starting points; numerical validity and real-sensor calibration are separate requirements."
+  },
+  "sensor": {
+    "sensor_model": "gelsight_mini_nominal",
+    "calibrated": false,
+    "gel": {
+      "width_m": 0.02525,
+      "length_m": 0.02075,
+      "thickness_m": 0.004,
+      "elements": [
+        36,
+        30,
+        8
+      ]
+    },
+    "material": {
+      "model": "neo_hookean",
+      "young_pa": 100000,
+      "poisson": 0.49,
+      "mooney_fraction": 0.2,
+      "formulation": "displacement",
+      "density_kg_m3": 1100
+    },
+    "camera": {
+      "width_px": 320,
+      "height_px": 240,
+      "fov_width_m": 0.0186,
+      "fov_height_m": 0.0143,
+      "center_x_m": 0,
+      "center_y_m": 0,
+      "projection": "pinhole",
+      "standoff_m": 0.024
+    },
+    "optics": {
+      "backend": "cuda",
+      "ambient": 0.12,
+      "diffuse": 0.55,
+      "specular": 0.08,
+      "shininess": 24,
+      "gamma": 2.2,
+      "light_directions": [
+        [
+          0.8,
+          0,
+          0.6
+        ],
+        [
+          -0.4,
+          0.692820323,
+          0.6
+        ],
+        [
+          -0.4,
+          -0.692820323,
+          0.6
+        ]
+      ],
+      "light_colors": [
+        [
+          1,
+          0.12,
+          0.08
+        ],
+        [
+          0.1,
+          1,
+          0.15
+        ],
+        [
+          0.12,
+          0.16,
+          1
+        ]
+      ],
+      "marker_spacing_m": 0.0014,
+      "marker_radius_m": 0.0001,
+      "marker_opacity": 0.45,
+      "background_image": null,
+      "animation_fps": 5,
+      "marker_style": "material",
+      "marker_grid_rows_cols": [
+        7,
+        9
+      ],
+      "marker_margin_px": [
+        24,
+        24
+      ],
+      "marker_radius_px": 6,
+      "model": "taxim",
+      "render_mode": "raw",
+      "response_gain": 2
+    },
+    "visualization": {
+      "marker_scale": 10,
+      "marker_key_um": 100,
+      "save_mesh_frames": true,
+      "mesh_deformation_scale": 1.0
+    }
+  },
+  "specimen": {
+    "geometry": "rigid_circular_cylinder_lateral_surface",
+    "axis": "y",
+    "maximum_wrap_rad": 1.0471975511965976,
+    "axes": "x=across the cylinder, y=cylinder axis and slide, z=out_of_sensor",
+    "nominal_first_touch_center_xy_m": [
+      0,
+      0
+    ],
+    "fixture": {
+      "type": "rigid_pilot_at_the_cylinder_axis",
+      "coupling": "the whole lateral surface follows the pilot",
+      "constrained_platen_dofs": [
+        "x",
+        "rotation_x",
+        "rotation_y",
+        "rotation_z"
+      ],
+      "note": "Under load control the pilot's z is free and carries the commanded force; x and all rotations are prescribed, and y is the slide."
+    },
+    "notes": [
+      "diameter_m and length_m come from the simulation config's object geometry, so one setup serves every cylinder size.",
+      "maximum_wrap_rad caps the patch cut from the lateral surface. The patch always reaches at least as far across the gel as the surface can touch: where it stops short, it has already risen more than the contact pinball above first touch.",
+      "The cylinder is longer than the gel plus the slide travel, so the contact band never runs off its ends."
+    ]
+  },
+  "protocol": {
+    "normal_control": "prescribed_normal_force",
+    "travel_sign": "positive_toward_sensor",
+    "travel_reference": "first_touch_of_the_cylinder's_lowest_line_with_the_undeformed_sensor",
+    "travel_meaning": "An outcome, not a command: the cylinder's pilot node is free in z under a commanded normal load, and its position is read back per substep and recorded as platen_travel_m.",
+    "initialization": {
+      "record_as_dataset_frames": false,
+      "start_time_s": -2,
+      "end_time_s": 0,
+      "start_normal_travel_m": 0,
+      "end_normal_travel_m": 5e-05,
+      "x_m": 0,
+      "y_m": 0,
+      "twist_rad": 0,
+      "interpolation": "linear",
+      "start_contact": "nominal_first_touch",
+      "carry_material_and_contact_history_into_recording": true,
+      "require_contact_acceptance_before_recording": true,
+      "note": "A load cannot close an open gap, so contact is established by travel and the cylinder is then handed over to load control. A Hertz line contact carries pi*E*/2 of load per unit length per metre of approach whatever the radius, so 0.050 mm of travel is worth roughly 0.2 N across this gel for both diameters - a band one to two millimetres wide, a few gel faces, and well below the 1 N the recording starts at. The estimate is a half-space one and the gel is a bonded 4 mm layer, so the seated load is read from the solve, not from it. This is the one travel that is still a command."
+    },
+    "recorded_interval_s": [
+      0,
+      3.5
+    ],
+    "pose_interpolation": "linear",
+    "phases": [
+      {
+        "name": "press",
+        "start_time_s": 0,
+        "end_time_s": 2
+      },
+      {
+        "name": "hold_after_press",
+        "start_time_s": 2,
+        "end_time_s": 2.3
+      },
+      {
+        "name": "slide_along_the_cylinder_axis_at_fixed_load",
+        "start_time_s": 2.3,
+        "end_time_s": 3.2,
+        "speed_m_s": 0.005,
+        "acceleration_m_s2": 0.025,
+        "distance_m": 0.004
+      },
+      {
+        "name": "hold_after_slide",
+        "start_time_s": 3.2,
+        "end_time_s": 3.5
+      }
+    ],
+    "keyframes": [
+      {
+        "time_s": 0,
+        "x_m": 0,
+        "y_m": 0,
+        "twist_rad": 0,
+        "normal_force_n": 1.0
+      },
+      {
+        "time_s": 0.5,
+        "x_m": 0,
+        "y_m": 0,
+        "twist_rad": 0,
+        "normal_force_n": 1.75
+      },
+      {
+        "time_s": 1,
+        "x_m": 0,
+        "y_m": 0,
+        "twist_rad": 0,
+        "normal_force_n": 2.5
+      },
+      {
+        "time_s": 1.5,
+        "x_m": 0,
+        "y_m": 0,
+        "twist_rad": 0,
+        "normal_force_n": 3.25
+      },
+      {
+        "time_s": 2,
+        "x_m": 0,
+        "y_m": 0,
+        "twist_rad": 0,
+        "normal_force_n": 4.0
+      },
+      {
+        "time_s": 2.3,
+        "x_m": 0,
+        "y_m": 0.0,
+        "twist_rad": 0,
+        "normal_force_n": 4.0
+      },
+      {
+        "time_s": 2.31,
+        "x_m": 0,
+        "y_m": 1.25e-06,
+        "twist_rad": 0,
+        "normal_force_n": 4.0
+      },
+      {
+        "time_s": 2.32,
+        "x_m": 0,
+        "y_m": 5e-06,
+        "twist_rad": 0,
+        "normal_force_n": 4.0
+      },
+      {
+        "time_s": 2.35,
+        "x_m": 0,
+        "y_m": 3.125e-05,
+        "twist_rad": 0,
+        "normal_force_n": 4.0
+      },
+      {
+        "time_s": 2.4,
+        "x_m": 0,
+        "y_m": 0.000125,
+        "twist_rad": 0,
+        "normal_force_n": 4.0
+      },
+      {
+        "time_s": 2.45,
+        "x_m": 0,
+        "y_m": 0.00028125,
+        "twist_rad": 0,
+        "normal_force_n": 4.0
+      },
+      {
+        "time_s": 2.5,
+        "x_m": 0,
+        "y_m": 0.0005,
+        "twist_rad": 0,
+        "normal_force_n": 4.0
+      },
+      {
+        "time_s": 2.8,
+        "x_m": 0,
+        "y_m": 0.002,
+        "twist_rad": 0,
+        "normal_force_n": 4.0
+      },
+      {
+        "time_s": 3.2,
+        "x_m": 0,
+        "y_m": 0.004,
+        "twist_rad": 0,
+        "normal_force_n": 4.0
+      },
+      {
+        "time_s": 3.5,
+        "x_m": 0,
+        "y_m": 0.004,
+        "twist_rad": 0,
+        "normal_force_n": 4.0
+      }
+    ],
+    "release": false,
+    "allow_recorded_lift_off": false,
+    "notes": [
+      "Every cylinder in this comparison is pressed to the same 4 N, so the two diameters are compared at equal load rather than at equal travel.",
+      "Equal travel is not equal load: a 100 mm cylinder spreads a given travel over a far wider band than a 20 mm one, so a travel-driven comparison would press the two at different loads and each would need its own preset. Commanding the load removes that.",
+      "The press ramps from 1 N so the handover from preload to load control is gradual whichever side of 1 N the preload landed on.",
+      "The slide runs along the cylinder's own axis, so the contact geometry does not change during it and what the record holds is the frictional transition: stick, the slip front, sliding, and re-stick in the final hold.",
+      "The slide accelerates into its 5 mm/s over 0.2 s (500 um) instead of stepping into it: a velocity step is an infinite acceleration once mass is present, and even quasi-statically it asked every contact point to cross its elastic slip allowance in a single increment.",
+      "The slide is integrated with mass at 0.1 ms; see protocol.transient.",
+      "The holds are 0.3 s, which covers re-stick after the platen stops on a rigid, elastic interface.",
+      "The slide is 4 mm. At 4 N the band under a cylinder shears elastically for a long way before it slides: the 100 mm case reached only mu = 0.21 against a declared static 0.6 after the first 0.4 mm, so a 2 mm stroke ends in partial slip, with the slip front still travelling inwards. 4 mm is what the measured approach to gross sliding asks for, and it doubles the cost of the transient window."
+    ],
+    "transient": {
+      "numerical_damping": 0.05,
+      "windows": [
+        {
+          "start_time_s": 2.29,
+          "end_time_s": 2.8,
+          "time_increment_s": 0.0001,
+          "solve_interval_s": 0.005,
+          "sample_interval_s": 0.01,
+          "inertia": true,
+          "reason": "The whole slide is integrated with mass. A quasi-static solve loses a slide at its onset: contact points at the edge of the band leave stick and then open, each release dumping stored elastic energy in one instant, and Newton's trial step turns a gel element inside out. With mass the release is an acceleration and the solve carries on. Inertia is switched on 10 ms before the slide, inside the hold, so the transition and the first contact event are not the same load step."
+        },
+        {
+          "start_time_s": 2.8,
+          "end_time_s": 3.2,
+          "time_increment_s": 0.0001,
+          "solve_interval_s": 0.005,
+          "sample_interval_s": 0.01,
+          "inertia": true,
+          "reason": "The second half of the slide, on the same footing as the first. It is stated as its own window rather than by moving the first window's end, because a run extended part way through the slide may not redefine a window that already governed substeps in its result file. Two touching windows with identical settings integrate exactly as one."
+        }
+      ],
+      "note": "A rigid cylinder brings no material damping to the interface and this gel carries no Prony branches, so TINTP amplitude decay is the only damping in the window: it removes the integrator's own high-frequency content and no Rayleigh terms are added. The rigid slab reference runs its slide on the same footing."
+    }
+  },
+  "contact_acceptance": {
+    "scope": "all_recorded_frames_and_converged_substeps",
+    "definition": "continuous_contact_band_under_the_cylinder",
+    "sensor_region": "camera_field_of_view_for_bin_activity; loaded_sensor_nodes_for_geometry_and_edge_margin; whole_outer_sensor_surface_for_total_force",
+    "edge_margin_scope": "loaded_sensor_nodes",
+    "minimum_geometric_footprint_coverage_fraction": 1,
+    "minimum_plane_edge_margin_m": 0.0005,
+    "use_deformed_sensor_coordinates": true,
+    "macroscopic_contact_bins": {
+      "size_xy_m": [
+        0.001,
+        0.001
+      ],
+      "coordinates": "sensor_material_xy",
+      "clip_bins_at_sensor_boundary": true,
+      "contact_measure": "positive_repulsive_normal_contact_force_integrated_in_each_bin",
+      "minimum_bin_force_n": 1e-06,
+      "required_active_bin_fraction": 0,
+      "region": "camera_field_of_view",
+      "region_note": "A cylinder touches the gel along a band, so most bins carry no load by design and no fraction of them is required. The fraction is recorded in every frame, and it is what the band's width is read from; the gates that a cylinder can meaningfully fail are total repulsive force, which says contact exists, and the two loaded-node geometry rules, which say the load sits inside the target rather than running off its edge."
+    },
+    "minimum_total_repulsive_normal_force_n": 0.01,
+    "microscopic_asperity_gaps_allowed": true,
+    "tangential_sliding_allowed": true,
+    "permanent_bonding": false,
+    "full_contact_enforcement": "reject_sequence_if_acceptance_fails; do_not_disable_separation",
+    "initial_state_adjustment": "No silent preload increase or contact constraint change; revise the config if preload does not achieve acceptance.",
+    "status": "requirements_only_not_verified_by_a_solve"
+  },
+  "discretization": {
+    "gel_base_elements": [
+      36,
+      30,
+      8
+    ],
+    "common_contact_surface_max_edge_m": 0.000125,
+    "refined_depth_into_each_deformable_body_m": 0.0005,
+    "maximum_element_growth_ratio": 1.3,
+    "same_sensor_mesh_for_all_cases": true,
+    "required_checks": [
+      "surface_resolution",
+      "through_thickness_convergence",
+      "near_incompressible_locking",
+      "contact_band_resolution"
+    ],
+    "note": "The default gel uses sensor.gel.elements (36 x 30 x 8), which puts about 0.70 mm faces under a contact band several millimetres wide at 4 N. Set gel_mesh to refined to opt into the 0.125 mm whole-surface grid; the preload band is only a few faces wide on the uniform mesh.",
+    "object_mesh": {
+      "default": "simplified",
+      "curved_target_chord_deviation_m": 2.5e-07,
+      "curved_target_axial_max_edge_m": 0.001,
+      "rigid_texture_max_edge_m": 0.00035,
+      "chord_note": "A faceted target is a polygon, not a circle: each facet's chord sags below the surface it stands for, normal to that surface. A quarter of a micrometre is well under what the gel resolves in height, and it sets the facet arc - 0.14 mm on the 20 mm cylinder, where the cap of 0.35 mm would have allowed 1 um - rather than leaving the curvature to whatever grid a texture would have used.",
+      "axial_note": "The lateral surface is exactly straight along the axis, so axial facet length carries no geometric error and only has to keep the facets from being so long that the contact search sees a single strip. 1 mm puts 50 rows under a 50 mm cylinder.",
+      "note": "Object discretization is independent of the unchanged gel mesh."
+    },
+    "gel_mesh": "uniform"
+  },
+  "contact_numerics": {
+    "formulation": "augmented_lagrange",
+    "sliding": "finite",
+    "separation": "allowed",
+    "normal_stiffness_factor": 10,
+    "penetration_tolerance_m": 1e-05,
+    "tangential_stiffness_factor": 30,
+    "elastic_slip_tolerance_m": 7.5e-05,
+    "pinball_radius_m": 0.004,
+    "update_stiffness_each_iteration": true,
+    "stabilization_damping": {
+      "normal_factor": 0.001,
+      "tangential_factor": 0.001,
+      "activation": "always"
+    },
+    "symmetric_pair": false,
+    "pinball_note": "Absolute pinball radius: detection points farther than this from the target are not searched. 4 mm is well beyond any gap the protocol opens under the cylinder, and on the 20 mm cylinder it also does the truncated patch no harm - where the patch ends, its surface already stands 5 mm above first touch, further than the pinball, so nothing outside it could have been found in any case.",
+    "penetration_note": "Penetration scales as 1/FKN. On the slab suite it was measured at 26.4 um at FKN = 1 and 0.69 um at FKN = 10, and a 10 um tolerance above the latter keeps augmentation from firing on nearly every substep, which is what made contact status chatter until the solve stopped.",
+    "tangential_pair_note": "FKT and SLTO are raised together, so the elastic slip the interface tolerates - their ratio - is unchanged at 2.5 um and the contact is exactly as stiff. What changes is how often augmented Lagrange revisits a converged state to update its multipliers. At FKT = 1 each revisit threw the residual up by as much as two orders of magnitude, and the slide was lost within tens of micrometres.",
+    "provenance_note": "This contact table is the slab suite's, where each setting was measured against a flat 5 N contact. What carries over is the argument rather than the numbers: FKN and the tangential pair were raised to keep augmented Lagrange from revisiting converged states, which is a property of the formulation and the load level, not of the target's shape. The measured penetration and slip below are that suite's and have not been re-measured on a curved target; a band narrower than a flat footprint carries the same load at higher pressure, so expect more penetration than the figures quoted and check it in max_penetration_m."
+  },
+  "solver": {
+    "version": 252,
+    "license_type": "ansys",
+    "cores": 2,
+    "gpu": true,
+    "allow_unlisted_gpu": false,
+    "require_gpu": true,
+    "initial_substeps": 10,
+    "maximum_substeps": 200,
+    "iterations": 150,
+    "newton_raphson": "unsymmetric",
+    "force_tolerance": 0.005,
+    "balance_tolerance": 0.02,
+    "force_norm": 1,
+    "maximum_time_increment_s": 0.01,
+    "equation_solver": "sparse",
+    "nonlinear_diagnostics": false,
+    "transient_points_per_cycle": 13,
+    "predict_cutback": true,
+    "note": "Large deflection (NLGEOM) is always on. The analysis is quasi-static except inside protocol.transient windows, which integrate mass. GPU acceleration is requested and verified by the run; a formulation the GPU cannot solve stops the run rather than silently changing the model. transient_points_per_cycle and predict_cutback are CUTCONTROL settings. 13 points per response cycle is measured, not assumed: at the inertia window's onset the rigid reference held a 8.5e-5 s increment and converged every substep in one iteration with it, and without it ANSYS predicted a larger increment, failed to converge, bisected to 2.3e-5 s and spent four iterations a substep. Leaving the key null sends no command and takes whatever ANSYS would choose. The 150-iteration ceiling leaves headroom for contact status changes; it used to be imposed silently on top of a declared 80, so a resolved run disagreed with the setup it came from. cores, gpu, require_gpu and allow_unlisted_gpu say where a run executes and are the only solver settings a resolved run may hold differently from this block."
+  },
+  "dataset": {
+    "sample_interval_s": 0.01,
+    "record": [
+      "tactile_rgb",
+      "surface_displacement_m",
+      "marker_positions_px",
+      "marker_displacement_m",
+      "normal_force_n",
+      "tangential_force_n",
+      "torque_nm",
+      "contact_pressure_pa",
+      "repulsive_contact_pressure_pa",
+      "contact_status",
+      "slip_displacement_m",
+      "contact_coverage",
+      "platen_travel_m",
+      "deformed_mesh_frames",
+      "time_s"
+    ],
+    "include_resolved_config": true,
+    "include_initialization_history": true,
+    "physical_marker_coordinates_unscaled": true,
+    "labels": "material_family_and_physical_parameters; no_claim_of_measured_specimen_identity",
+    "limitations": [
+      "This sequence has no release, so recovery after separation and adhesive pull-off are not observed.",
+      "The slide runs along the cylinder's axis, so it identifies friction along one direction only and says nothing about rolling or about sliding across the band.",
+      "Neither hold is long enough to read an equilibrium modulus from.",
+      "The slide is integrated with mass, but no vibration channel is calibrated or claimed.",
+      "Cylinder travel is an outcome under load control, so a case's indentation depth is a result to read, not a parameter to compare against another run's."
+    ]
+  },
+  "required_capabilities": [
+    "material_plane_suite_loader",
+    "preloaded_initial_state_with_history",
+    "curved_rigid_target",
+    "prescribed_normal_force_control",
+    "time_dependent_quasi_static_steps",
+    "velocity_dependent_friction",
+    "contact_band_acceptance"
+  ],
+  "references": {
+    "hyperelastic": "https://ansyshelp.ansys.com/public/Views/Secured/corp/v252/en/ans_mat/aQw8sq22dldm.html",
+    "viscoelastic": "https://ansyshelp.ansys.com/public/Views/Secured/corp/v251/en/ans_str/Hlp_G_STR8_3.html",
+    "friction": "https://ansyshelp.ansys.com/public/Views/Secured/corp/v252/en/ans_ctec/Hlp_ctec_realkey.html"
+  },
+  "examples": [
+    {
+      "name": "cylinder_100mm_press_slide",
+      "config": "cylinder_100mm.json"
+    },
+    {
+      "name": "cylinder_20mm_press_slide",
+      "config": "cylinder_20mm.json"
+    }
+  ],
+  "entry_point": "gelsight-ansys run --config <case.json>"
+}
