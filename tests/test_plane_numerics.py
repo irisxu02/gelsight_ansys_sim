@@ -666,7 +666,7 @@ class TransientWindowTests(unittest.TestCase):
         self.assertLess(coverage.region.mean(), 1.0)
         self.assertGreater(coverage.region.sum(), 0)
         spans = [
-            (e[:-1] + e[1:])[m].ptp() / 2
+            np.ptp((e[:-1] + e[1:])[m]) / 2
             for e, m in zip(
                 coverage.edges, (coverage.region.any(axis=0), coverage.region.any(axis=1))
             )
