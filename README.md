@@ -66,8 +66,17 @@ Solver GPU acceleration is available as an explicit option.
 - **Material comparison:** finite slabs with rubber, compressible foam,
   effective fabric, and rigid reference surfaces; configurable relaxation,
   directional friction, roughness, and adhesion.
+- **[Force-controlled curved objects](docs/configuration.md#cylinders):** rigid
+  cylinders pressed to a commanded normal load, held, and slid with the load
+  maintained. Diameter, length and axis are config parameters.
+- **[Custom gel pads](docs/configuration.md#custom-gel-pads):** a pad that
+  narrows towards its sensing face, with its own marker array declared in
+  physical units.
 - **Tactile rendering and measurements:** CUDA projection and optics, material
   marker tracking, surface deformation, forces and torques, and PNG/GIF previews.
+- **[Finite-element views](docs/dataset.md#finite-element-views):** the deformed
+  mesh with its element edges, contoured by contact pressure and by total
+  displacement, written frame by frame while the run solves.
 
 ## Quick start
 
@@ -234,6 +243,7 @@ Use them as starting points for your own geometry.
 |---|---|---|
 | [imported_rigid_press](configs/imported_rigid_press.json) | Indent and release | Rigid block imported from STL |
 | [imported_soft_press](configs/imported_soft_press.json) | Indent and release | Deformable 50 kPa block imported from a JSON hex mesh |
+| [custom_gel_press](configs/custom_gel_press.json) | Indent and release | Rigid sphere on a pad tapering to a 22 × 16 mm face, 11 × 17 array of 0.5 mm markers |
 
 ### Material comparison presets
 
@@ -248,6 +258,18 @@ Use `python scripts/run_simulation.py run --config PATH` for these examples.
 | [plane_slippery_surface](configs/material_plane_slide/slippery_surface.json) | Press, hold, slide, hold | Smooth rigid slab; lower friction (static 0.12, kinetic 0.08) |
 | [plane_rough_surface](configs/material_plane_slide/rough_surface.json) | Press, hold, slide, hold | Rigid slab with resolved sinusoidal surface texture |
 | [plane_sticky_surface](configs/material_plane_slide/sticky_surface.json) | Press, hold, slide, hold | Smooth rigid slab; reversible adhesion and cohesive shear |
+
+### Curved object presets
+
+Both presets are pressed to a commanded 4 N, held, slid 2 mm along the cylinder
+axis at 5 mm/s under the same load, and held again.
+
+| Preset | Motion | Object / material |
+|---|---|---|
+| [cylinder_100mm](configs/cylinder_press_slide/cylinder_100mm.json) | Press to 4 N, hold, slide, hold | Rigid smooth cylinder, 100 mm diameter x 50 mm, axis along y |
+| [cylinder_20mm](configs/cylinder_press_slide/cylinder_20mm.json) | Press to 4 N, hold, slide, hold | Rigid smooth cylinder, 20 mm diameter x 50 mm, axis along y |
+| [custom_gel_cylinder_100mm](configs/custom_gel_cylinder_slide/cylinder_100mm.json) | Press to 4 N, hold, slide, hold | The 100 mm cylinder on the tapered custom pad, sensor turned a quarter so the axis and slide run along x |
+| [custom_gel_cylinder_20mm](configs/custom_gel_cylinder_slide/cylinder_20mm.json) | Press to 4 N, hold, slide, hold | The 20 mm cylinder on the same turned tapered pad |
 
 Select a preset with `--config`. The [example guide](docs/examples/README.md)
 describes the trajectories, object materials, and export format. Each run saves

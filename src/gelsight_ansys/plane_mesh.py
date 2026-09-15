@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from .mesh import ObjectMesh, structured_mesh, tensor_mesh
+from .mesh import ObjectMesh, structured_mesh, tapered, tensor_mesh, with_level
 
 
 def depth_axis(thickness, size, refined_depth, growth=1.3):
@@ -57,7 +57,12 @@ def gel_mesh(case, element_size=None):
         rules["refined_depth_into_each_deformable_body_m"],
         rules["maximum_element_growth_ratio"],
     )[::-1]
-    return tensor_mesh(x, y, z)
+    from .config import Gel
+
+    gel = Gel(**data)
+    if not gel.tapered:
+        return tensor_mesh(x, y, z)
+    return tapered(tensor_mesh(x, y, with_level(z, -gel.taper_height_m)), gel)
 
 
 def slab_mesh(

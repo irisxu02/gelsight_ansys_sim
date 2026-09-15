@@ -40,6 +40,45 @@ changes under material strain and perspective.
 The nominal dimensions and rendering parameters are reference-preset values;
 they are not asserted to be measurements of every Mini cartridge.
 
+## A pad that narrows towards its sensing face
+
+`gel.top_width_m`, `gel.top_length_m` and `gel.taper_height_m` describe a gel
+bonded to a backing wider than the face it senses with. The three are declared
+together or not at all: `width_m`, `length_m` and `thickness_m` stay the
+backing and the total height, and the taper is measured down from the contact
+face. [`custom_gel_press`](../configs/custom_gel_press.json) is the shipped
+example:
+
+| Quantity | Tapered profile |
+|---|---|
+| Backing, x × y | 25.25 × 20.75 mm, as the nominal pad |
+| Straight wall | 3 mm (`thickness_m` 5 mm less `taper_height_m` 2 mm) |
+| Taper | 2 mm, linear between the two sections |
+| Sensing face, x × y | 22 × 16 mm |
+| Mesh | Uniform 36 × 30 × 10; 0.611 × 0.533 mm on the face, 0.5 mm layers |
+| Marker layout | 11 rows × 17 columns, 187 markers |
+| Marker margins | 10 px from the image edges to outermost centers |
+| Marker pitch | 1.086 mm along x, 1.305 mm along y |
+| Dot appearance | 0.5 mm diameter, declared physically |
+
+The grid is the prism's, moved: the surface quads that carry contact, the bottom
+nodes that are held, and the marker attachments are all exactly what they were,
+so nothing downstream distinguishes a tapered pad from a prismatic one. The taper
+is a coordinate map, so it composes with every mesh rule the gel already has -
+a uniform axis, `through_thickness_bias`, the refined gel mesh, an explicit
+element size - each of which keeps its own grading with a node level joined to it
+where the taper begins. Without that level the elements crossing the boundary
+would build a chamfer of the declared shape rather than the shape.
+
+The dots are declared by `marker_radius_m` with `marker_radius_px` left null.
+That matters on this camera: a pixel radius is one number for both axes, and the
+pixels are not square (0.0581 mm along x against 0.0596 mm along y), so a dot
+given in pixels renders as an ellipse. A physical radius is scaled separately in
+each axis and comes out round. Every dot in this array sits inside the image, so
+all 187 of them are tracked, at a 1.086 mm pitch against a 0.5 mm dot. That is
+three times the marker count of the nominal 7 × 9 array on a smaller face, so
+the flow field is sampled far more finely while each dot stays well separated.
+
 The public [GelSight SDK](https://github.com/gelsightinc/gsrobotics) also uses a
 320 × 240 default capture size and exposes a configurable crop. Consequently,
 raw capture resolution alone does not establish a physical field of view. The

@@ -58,15 +58,35 @@ class ConfigurationTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         for path in (root / "configs").glob("*.json"):
             config = Config.load(path)
+            gel = config.gel
             mesh = structured_mesh(config.gel)
-            for axis, width, count in zip(
-                range(3),
-                (config.gel.width_m, config.gel.length_m, config.gel.thickness_m),
-                config.gel.elements,
-            ):
+            if gel.tapered:
+                # A gel that narrows has no single cross-section. Each layer is
+                # still uniform, and the two that matter are the face the object
+                # touches and the backing the gel is bonded to.
+                for nodes, extents in (
+                    (mesh.surface_nodes, (gel.top_width_m, gel.top_length_m)),
+                    (mesh.bottom_nodes, (gel.width_m, gel.length_m)),
+                ):
+                    layer = mesh.coordinates[nodes]
+                    for axis, extent in enumerate(extents):
+                        np.testing.assert_allclose(
+                            np.diff(np.unique(layer[:, axis])),
+                            extent / gel.elements[axis],
+                        )
                 np.testing.assert_allclose(
-                    np.diff(np.unique(mesh.coordinates[:, axis])), width / count
+                    np.diff(np.unique(mesh.coordinates[:, 2])),
+                    gel.thickness_m / gel.elements[2],
                 )
+            else:
+                for axis, width, count in zip(
+                    range(3),
+                    (gel.width_m, gel.length_m, gel.thickness_m),
+                    gel.elements,
+                ):
+                    np.testing.assert_allclose(
+                        np.diff(np.unique(mesh.coordinates[:, axis])), width / count
+                    )
             self.assertEqual(
                 config.to_dict(), Config.from_dict(config.to_dict()).to_dict()
             )

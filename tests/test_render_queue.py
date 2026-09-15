@@ -88,7 +88,7 @@ class RenderQueueTests(unittest.TestCase):
     def test_plane_and_indenter_configs_are_all_discovered(self):
         root = Path(__file__).resolve().parents[1]
         jobs, blocked = discover(root / "configs", 4)
-        self.assertEqual(len(jobs), 16)
+        self.assertEqual(len(jobs), 17)
         self.assertEqual(blocked, [])
         self.assertTrue(all(j["resolution"] == [1280, 960] for j in jobs))
         self.assertEqual(sum(j["kind"] == "plane" for j in jobs), 9)

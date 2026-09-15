@@ -8,6 +8,7 @@ INDENTER_CASES = {
     "rough": "rough_sphere_slide",
     "imported_rigid": "imported_rigid_press",
     "imported_soft": "imported_soft_press",
+    "custom_gel": "custom_gel_press",
 }
 # Each value is the preset's path under configs/, without the suffix: the
 # finite-target adapter now serves more than one suite, so the folder is part of

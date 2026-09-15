@@ -33,6 +33,17 @@ class Gel:
     through_thickness_bias: float = 0.0
     contact_element_size_m: float | None = None
     refinement_half_extents_m: tuple[float, float] = (0.0036, 0.003)
+    # A gel that narrows towards the surface it senses with. width/length/
+    # thickness stay the backing the gel is bonded to; these three describe the
+    # contact face and how far down the transition to it reaches. All three
+    # together or none: a pad that narrows is one shape, not three settings.
+    top_width_m: float | None = None
+    top_length_m: float | None = None
+    taper_height_m: float | None = None
+
+    @property
+    def tapered(self):
+        return self.top_width_m is not None
 
 
 @dataclass(frozen=True)
@@ -481,6 +492,7 @@ class Config:
             value = getattr(self.gel, name)
             if not math.isfinite(value) or not 0 <= value <= 4:
                 raise ValueError(f"gel.{name} must be in [0, 4]")
+        self.validate_taper()
         self.material.validate()
         self.indenter.material.validate("indenter.material")
         if type(self.indenter.deformable) is not bool:
@@ -714,6 +726,23 @@ class Config:
                 )
 
         return self
+
+    def validate_taper(self):
+        """A gel that narrows towards its contact face, if it declares one."""
+        gel = self.gel
+        declared = (gel.top_width_m, gel.top_length_m, gel.taper_height_m)
+        if all(value is None for value in declared):
+            return
+        if any(value is None for value in declared):
+            raise ValueError(
+                "A tapered gel needs top_width_m, top_length_m and taper_height_m"
+            )
+        for key in ("top_width_m", "top_length_m", "taper_height_m"):
+            positive(getattr(gel, key), f"gel.{key}")
+        if gel.top_width_m > gel.width_m or gel.top_length_m > gel.length_m:
+            raise ValueError("A tapered gel's contact face cannot exceed its backing")
+        if gel.taper_height_m >= gel.thickness_m:
+            raise ValueError("The taper must be shorter than the gel it is cut into")
 
     def to_dict(self):
         return json.loads(

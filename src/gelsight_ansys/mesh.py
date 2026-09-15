@@ -89,6 +89,23 @@ def contact_axis(half_extent, elements, core_half_extent, size):
     return np.r_[-positive[:0:-1], positive]
 
 
+def tapered(mesh, gel):
+    """Narrow a prismatic grid towards its contact face.
+
+    The topology is the prism's; only the coordinates move. Everything built on
+    the grid - the surface quads that carry contact, the bottom nodes that are
+    held, the marker attachments - therefore stays exactly what it was.
+    """
+    # Zero below the taper, one at the contact face.
+    fraction = np.clip(1 + mesh.coordinates[:, 2] / gel.taper_height_m, 0.0, 1.0)
+    for axis, top, backing in (
+        (0, gel.top_width_m, gel.width_m),
+        (1, gel.top_length_m, gel.length_m),
+    ):
+        mesh.coordinates[:, axis] *= 1 + fraction * (top / backing - 1)
+    return mesh
+
+
 def structured_mesh(gel):
     nx, ny, nz = gel.elements
     if gel.contact_element_size_m is None:
@@ -110,7 +127,10 @@ def structured_mesh(gel):
     q = np.linspace(1.0, 0.0, nz + 1)
     bias = gel.through_thickness_bias
     q = np.expm1(bias * q) / np.expm1(bias) if bias else q
-    return tensor_mesh(x, y, -gel.thickness_m * q)
+    z = -gel.thickness_m * q
+    if not gel.tapered:
+        return tensor_mesh(x, y, z)
+    return tapered(tensor_mesh(x, y, with_level(z, -gel.taper_height_m)), gel)
 
 
 def tensor_mesh(x, y, z):
