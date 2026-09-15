@@ -263,6 +263,16 @@ raw RGB and signed differences during the solve; the replay command above
 currently supports general-contact runs only.
 [Optical response and subtraction](docs/usage.md#raw-rgb-and-background-subtraction)
 
+Runs that ask for it also write `mesh/frame_*.png` and `mesh.gif`: the deformed
+finite-element mesh with its element edges, contoured by contact pressure on the
+contact surface and by total nodal displacement on the gel body, with the rigid
+object drawn over it as grid lines. Set `visualization.save_mesh_frames` to
+enable it and `visualization.mesh_deformation_scale` to exaggerate the shape.
+Contour limits grow with the run in 1-2-5 steps and are recorded per frame in
+`summary.json`. Any finished run can be drawn afterwards with
+`python scripts/render_mesh_views.py --run outputs/YOUR_COMPLETED_RUN`.
+[Finite-element views](docs/dataset.md#finite-element-views)
+
 Marker arrows are enlarged 10× with a 100 µm actual-displacement key. Saved
 physical data and tactile images retain their actual motion scale.
 [Run and replay commands](docs/usage.md) · [Dataset reference](docs/dataset.md)

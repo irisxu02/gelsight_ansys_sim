@@ -23,6 +23,7 @@ stays thin and that the command behind it still answers `--help`.
 | `audit_examples.py` | Check every exported preset against its current preset, manifest hashes, and the RGB difference identity; `--run` audits a curated export outside the catalog. |
 | `compare_examples.py` | Plot the force and marker metrics of the four sphere examples against each other. |
 | `compare_rendering.py` | Build raw-versus-subtracted RGB illustrations from a finished run; optionally replay general-contact optics at another resolution/backend. |
+| `render_mesh_views.py` | Draw the deformed finite-element mesh of a finished run, contoured by contact pressure and displacement, at any exaggeration or viewpoint. |
 
 ## Read a solve that is not converging
 

@@ -229,13 +229,29 @@ The optional outputs can be enabled in the configuration:
   "marker_scale": 10.0,
   "marker_key_um": 100.0,
   "save_panel_frames": false,
-  "save_tactile_gif": false
+  "save_tactile_gif": false,
+  "save_mesh_frames": false,
+  "mesh_deformation_scale": 1.0
 }
 ```
 
 Set `save_panel_frames` to `true` to retain `panels/frame_XXXX.png` and use a
 four-panel frame slider. Set `save_tactile_gif` to `true` to also save
-`tactile.gif`. Both default to `false`, including when absent from older configs.
+`tactile.gif`. Set `save_mesh_frames` to `true` to draw the deformed
+finite-element mesh as each frame is recorded, into `mesh/frame_XXXX.png` and
+`mesh.gif`; `mesh_deformation_scale` exaggerates the drawn shape and nothing
+else. The cylinder presets enable the mesh view; the others do not. It costs a
+fraction of a second per frame and reads only data the run already saves, so any
+finished run can be drawn afterwards, whether or not it was recorded with the
+setting on:
+
+```bash
+python scripts/render_mesh_views.py --run outputs/YOUR_COMPLETED_RUN --deformation-scale 5
+```
+
+`--elevation` and `--azimuth` change the viewpoint.
+[Finite-element views](dataset.md#finite-element-views)
+All three default to `false`, including when absent from older configs.
 The numerical NPZ files, lossless RGB images, metrics, and raw solver files
 are retained regardless of these settings. No trajectory frames are dropped.
 Existing run directories are not automatically compacted.

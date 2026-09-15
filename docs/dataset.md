@@ -267,6 +267,35 @@ keys use panel frames and a tactile GIF. Force plots include z torque in N mm;
 native moment arrays and CSV remain in N m.
 
 
+## Finite-element views
+
+`visualization.save_mesh_frames` writes `mesh/frame_NNNN.png` as each frame is
+recorded, and the report collects them into `mesh.gif` and a second slider image.
+Each picture holds two views of the same converged state:
+
+| Panel | Body drawn | Contour |
+|---|---|---|
+| Left | Whole gel, contact face contoured and the rest plain | Contact pressure in kPa, from `contact_pressure_pa` |
+| Right | Whole gel exterior | Total nodal displacement magnitude in mm, from `gel_displacement_m` |
+
+Element edges are drawn on both, the undeformed body as a dotted box, and a
+rigid target as grid lines over the gel, clipped to the sensor footprint and to
+3 mm above first touch. A deformable object is not contoured; its own
+displacement is in `bodies/frame_NNNN.npz` under `indenter_displacement_m`.
+
+Nothing here is computed for the picture: the mesh is `solid_mesh.npz`, the
+solution is `bodies/frame_NNNN.npz`, and the pressure is the surface state's, so
+`scripts/render_mesh_views.py` rebuilds the same views from a finished run, at
+another exaggeration or viewpoint, with no solver.
+`visualization.mesh_deformation_scale` multiplies displacements in the drawing
+only, and defaults to 1, meaning true shape.
+
+A run does not know its peak pressure until it reaches it, so contour limits
+grow as it goes, in 1-2-5 steps, and each frame records the limits it was drawn
+on in `summary.json` under `mesh_color_limits`. A frame drawn early in a press
+therefore uses a lower ceiling than one drawn at peak load; the recorded limits
+say which.
+
 ## RGB modes
 
 Raw RGB is default. The subtraction display encodes signed differences as

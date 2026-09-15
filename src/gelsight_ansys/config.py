@@ -201,6 +201,11 @@ class Visualization:
     marker_key_um: float = 100.0
     save_panel_frames: bool = False
     save_tactile_gif: bool = False
+    # A finite-element view of the solved bodies, written while the run solves.
+    # It reads the same saved mesh and nodal solution the dataset already holds,
+    # so switching it off costs nothing but the pictures.
+    save_mesh_frames: bool = False
+    mesh_deformation_scale: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -429,7 +434,11 @@ class Config:
     def validate(self):
         positive(self.visualization.marker_scale, "visualization.marker_scale")
         positive(self.visualization.marker_key_um, "visualization.marker_key_um")
-        for key in ("save_panel_frames", "save_tactile_gif"):
+        positive(
+            self.visualization.mesh_deformation_scale,
+            "visualization.mesh_deformation_scale",
+        )
+        for key in ("save_panel_frames", "save_tactile_gif", "save_mesh_frames"):
             if type(getattr(self.visualization, key)) is not bool:
                 raise ValueError(f"visualization.{key} must be boolean")
         if self.schema_version != 4:

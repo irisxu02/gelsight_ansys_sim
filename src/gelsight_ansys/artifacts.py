@@ -347,6 +347,13 @@ def build_report(directory, config, metrics):
     limits = plot_limits(directory, metrics)
     selected = build_process_images(directory, config, metrics, images, limits)
     frame_folder = "panels" if config.visualization.save_panel_frames else "images"
+    # Finite-element views are written frame by frame while the run solves; the
+    # report only collects the ones that are there.
+    mesh_frames = sorted((directory / "mesh").glob("frame_*.png"))
+    if len(mesh_frames) > 1:
+        save_gif(
+            ImageFiles(mesh_frames), directory / "mesh.gif", config.optics.animation_fps
+        )
     write_json(
         directory / "visualization.json",
         {
@@ -360,6 +367,10 @@ def build_report(directory, config, metrics):
             "color_limits": limits,
             "frame_count": len(metrics),
             "frame_viewer_folder": frame_folder,
+            "mesh_frame_count": len(mesh_frames),
+            "mesh_view_contours": "contact pressure on the deformed contact surface; total nodal displacement on the deformed gel body",
+            "mesh_deformation_scale": config.visualization.mesh_deformation_scale,
+            "mesh_color_limits": "per frame in summary.json; raised in 1-2-5 steps as the run reaches new peaks",
             "tactile_gif_saved": config.visualization.save_tactile_gif,
             "preview_frame": selected,
             "animation_durations_ms": animation_durations(
@@ -436,6 +447,18 @@ def build_report(directory, config, metrics):
         if not config.visualization.save_panel_frames
         else ""
     )
+    mesh_section = (
+        '<h2>Finite-element view</h2><p class="note">Deformed mesh with element '
+        "edges: contact pressure on the contact surface, total nodal displacement "
+        "on the gel body, the rigid object drawn as grid lines. Deformation is "
+        f"shown at {config.visualization.mesh_deformation_scale:g}x. Color limits "
+        "grow with the run and are recorded per frame in summary.json.</p>"
+        '<img src="mesh.gif" alt="Deformed finite-element mesh contoured by '
+        'contact pressure and displacement">'
+        '<img id="meshframe" alt="Deformed mesh for the selected frame">'
+        if len(mesh_frames) > 1
+        else ""
+    )
     frame_alt = (
         "Tactile RGB, deformation, pressure and scaled marker motion"
         if config.visualization.save_panel_frames
@@ -464,6 +487,7 @@ def build_report(directory, config, metrics):
         + '<img id="panel" alt="'
         + frame_alt
         + '">'
+        + mesh_section
         + '<p><a href="process.gif">Full-process GIF</a>'
         + tactile_link
         + """ · <a href="metrics.csv">Metrics CSV</a> · <a href="summary.json">Run summary</a> · <a href="visualization.json">Plot scales</a></p>
@@ -475,6 +499,6 @@ def build_report(directory, config, metrics):
         + data
         + ";const frameFolder="
         + json.dumps(frame_folder)
-        + """;const slider=document.getElementById('slider');function show(){const i=Number(slider.value),m=data[i];document.getElementById('panel').src=frameFolder+'/frame_'+String(i).padStart(4,'0')+'.png';document.getElementById('metrics').textContent='Frame '+i+' / '+(data.length-1)+' | depth '+(m.depth_m*1000).toFixed(2)+' mm | twist '+(m.twist_rad*180/Math.PI).toFixed(1)+'° | normal force '+m.normal_force_n.toFixed(4)+' N | state '+m.state_source;}slider.oninput=show;show();</script></html>"""
+        + """;const slider=document.getElementById('slider');function show(){const i=Number(slider.value),m=data[i];const name='/frame_'+String(i).padStart(4,'0')+'.png';document.getElementById('panel').src=frameFolder+name;const mesh=document.getElementById('meshframe');if(mesh)mesh.src='mesh'+name;document.getElementById('metrics').textContent='Frame '+i+' / '+(data.length-1)+' | depth '+(m.depth_m*1000).toFixed(2)+' mm | twist '+(m.twist_rad*180/Math.PI).toFixed(1)+'° | normal force '+m.normal_force_n.toFixed(4)+' N | state '+m.state_source;}slider.oninput=show;show();</script></html>"""
     )
     (directory / "report.html").write_text(page, encoding="utf-8")

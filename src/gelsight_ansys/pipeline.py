@@ -9,6 +9,7 @@ from .artifacts import write_json
 from .camera import optical_surface
 from .config import Config
 from .contracts import SurfaceState
+from .fem_view import mesh_view
 from .mechanics import AnsysGel
 from .metrics import validate_frame
 from .run_services import RunLifecycle, create_run, prepare_optics, process_frame
@@ -124,6 +125,7 @@ def run(
         summary["render_device"] = renderer.device
         summary["projection_device"] = renderer.device
         with backend(config, directory / "solver", executable, restart=restart) as model:
+            view = mesh_view(directory, config, model)
             reference = model.reference_state()
             markers = Markers(
                 reference, config.optics.marker_spacing_m, config.camera, config.optics
@@ -171,6 +173,10 @@ def run(
                     body_metrics,
                 )
                 metric["timings"]["save_body_s"] = body_elapsed
+                if view is not None:
+                    metric["mesh_color_limits"] = view.render(
+                        index, state, metric, model.last_displacement
+                    )
                 if index:
                     metric["timings"].update(model.last_timings)
                 summary["frames"].append(metric)
@@ -179,6 +185,8 @@ def run(
                 progress(
                     f"Frame {index + 1}/{len(config.trajectory)}: depth={pose.depth_m * 1000:.3f} mm, force={metric['normal_force_n']:.6f} N, solver GPU={gpu['active']}"
                 )
+            if view is not None:
+                view.close()
         if (
             any(p.depth_m > 0 for p in config.trajectory)
             and max(m["normal_force_n"] for m in summary["frames"]) <= 1e-9
