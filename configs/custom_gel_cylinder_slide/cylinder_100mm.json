@@ -1,0 +1,60 @@
+{
+  "schema_version": 3,
+  "config_kind": "contact_simulation",
+  "name": "custom_gel_cylinder_100mm_press_slide_x",
+  "calibrated": false,
+  "setup": "suite.json",
+  "object": {
+    "geometry": {
+      "shape": "cylinder",
+      "diameter_m": 0.1,
+      "length_m": 0.05,
+      "axis": "x"
+    },
+    "material": {
+      "case": "../materials/rigid.json"
+    }
+  },
+  "surface": {
+    "model": "smooth"
+  },
+  "contact": {
+    "friction": {
+      "model": "coulomb_exponential_velocity_decay",
+      "static_coefficient": 0.6,
+      "kinetic_coefficient": 0.45,
+      "decay_velocity_m_s": 0.001,
+      "coefficient_law": "mu(v) = mu_k + (mu_s - mu_k) * exp(-abs(v) / decay_velocity_m_s)",
+      "anisotropy": "isotropic",
+      "pair": "specimen_surface_against_shared_sensor_surface"
+    },
+    "adhesion": {
+      "model": "none"
+    }
+  },
+  "status": "capability_example",
+  "runnable_with_current_cli": true,
+  "parameter_origin": "Illustrative synthetic values; a rigid reference geometry, not a named commercial material.",
+  "material_label": "Rigid smooth cylinder, 100 mm diameter, on the tapered pad, axis along x",
+  "required_capabilities": [
+    "curved_rigid_target",
+    "prescribed_normal_force_control",
+    "tapered_gel_pad"
+  ],
+  "model_notes": [
+    "Same object, load and 4 mm protocol as the nominal-pad case of this diameter; the sensor is a quarter turn round and the pad is the tapered one, so the pair isolates what the pad and its orientation change.",
+    "The contact line runs the 22 mm side of the 22 x 16 mm sensing face, against the 16 mm side in the y-slide suite, so the same 4 N is carried by a longer line.",
+    "The pad is 5 mm thick against the nominal 4 mm, which softens it: travel under the same load is a result to read, not a setting to compare."
+  ],
+  "expected_observables": [
+    "contact_band_width",
+    "peak_contact_pressure_pa",
+    "tangential_force_n",
+    "marker_displacement_m"
+  ],
+  "calibration_measurements": [
+    "normal_load_vs_travel_for_this_diameter",
+    "static_and_kinetic_friction_at_multiple_loads_and_speeds"
+  ],
+  "entry_point": "gelsight-ansys run --config <case.json>"
+}

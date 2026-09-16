@@ -12,6 +12,7 @@ stays thin and that the command behind it still answers `--help`.
 | Script | What it does |
 |---|---|
 | `run_simulation.py` | Run a configuration. The main entry point; also `--dry-run`. |
+| `run_examples.py` | Run several configurations one after another, which is what a one-checkout licence allows; reports each one's status and time. |
 | `resume_simulation.py` | Continue an interrupted run from saved states and solver restart files; plane runs also support retained checkpoints. |
 | `validate_simulation.py` | Launch licensed general-contact integration runs and check their numerical and output contracts. |
 | `validate_plane.py` | Run a plane-contact preset as a licensed validation and record whether it passed. |
@@ -23,6 +24,7 @@ stays thin and that the command behind it still answers `--help`.
 | `audit_examples.py` | Check every exported preset against its current preset, manifest hashes, and the RGB difference identity; `--run` audits a curated export outside the catalog. |
 | `compare_examples.py` | Plot the force and marker metrics of the four sphere examples against each other. |
 | `compare_rendering.py` | Build raw-versus-subtracted RGB illustrations from a finished run; optionally replay general-contact optics at another resolution/backend. |
+| `render_mesh_views.py` | Draw the deformed finite-element mesh of a finished run, contoured by contact pressure and displacement, at any exaggeration or viewpoint. |
 
 ## Read a solve that is not converging
 

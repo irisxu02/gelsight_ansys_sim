@@ -11,6 +11,11 @@ from dataclasses import dataclass
 
 import numpy as np
 
+# How far a curved target reaches past the gel it can touch. Contact never comes
+# near the patch boundary; the margin is what makes that checkable rather than
+# assumed, and it is what the edge-margin acceptance rule is measured against.
+TARGET_EDGE_MARGIN_M = 0.002
+
 
 @dataclass(frozen=True)
 class PlaneCase:
@@ -51,6 +56,102 @@ class PlaneCase:
     @property
     def bulk(self):
         return self.case["bulk_material"]
+
+    @property
+    def cylinder(self):
+        """The rigid cylinder the target is built on, or None for a flat specimen.
+
+        A cylinder and a flat-faced slab are both "the object the gel is pressed
+        against", and everything from the load protocol to the result reader
+        treats them alike. They differ in three places only - the target's grid,
+        how high its reference point sits, and how far it reaches across the gel
+        - so those three are derived here rather than read from dimensions that
+        mean different things for the two shapes.
+        """
+        specimen = self.suite["specimen"]
+        return specimen if "diameter_m" in specimen else None
+
+    def across_axis(self):
+        """Index of the gel axis a cylinder's curvature runs along.
+
+        A cylinder lying along y curves across x and the other way round, and
+        the patch, the reach checks and the footprint all need to agree on
+        which is which. They ask here rather than each spelling it out.
+        """
+        return 0 if self.cylinder["axis"] == "y" else 1
+
+    def gel_face_edge(self):
+        """Longest edge of an element on the face the gel senses with.
+
+        This is what a target has to be at least as fine as, whether the target
+        carries a texture or a curvature. It is measured on the sensing face,
+        which a tapered pad narrows to.
+        """
+        elements = self.suite["sensor"]["gel"]["elements"]
+        return max(extent / n for extent, n in zip(self.sensing_face_m(), elements))
+
+    def sensing_face_m(self):
+        """Width and length of the gel face an object can actually touch.
+
+        A gel that narrows towards its contact face is bonded to a backing wider
+        than the face it senses with, and it is the face that decides how far a
+        target has to reach.
+        """
+        gel = self.suite["sensor"]["gel"]
+        return (
+            gel.get("top_width_m") or gel["width_m"],
+            gel.get("top_length_m") or gel["length_m"],
+        )
+
+    def cylinder_wrap_rad(self):
+        """Half-angle of the patch built on the cylinder's lateral surface.
+
+        The patch reaches past the gel it can touch and no further: beyond that
+        the surface has turned away steeply enough that nothing this protocol
+        presses can close the gap, and continuing to wrap only adds facets the
+        contact search has to reject.
+        """
+        data = self.cylinder
+        radius = data["diameter_m"] / 2
+        across = self.sensing_face_m()[self.across_axis()] / 2
+        needed = (across + TARGET_EDGE_MARGIN_M) / radius
+        return min(data["maximum_wrap_rad"], math.asin(min(1.0, needed)))
+
+    def cylinder_arc_edge(self, maximum_edge):
+        """Facet arc length that keeps the chord within the declared deviation.
+
+        A faceted target is a polygon, not a circle: the chord of each facet
+        sags below the surface it represents. The gel reads height differences
+        of a micrometre, so the sag is held to a declared tolerance rather than
+        left to whatever the texture grid happens to be.
+        """
+        data = self.cylinder
+        radius = data["diameter_m"] / 2
+        tolerance = self.suite["discretization"]["object_mesh"][
+            "curved_target_chord_deviation_m"
+        ]
+        return min(maximum_edge, 2 * radius * math.acos(max(-1.0, 1 - tolerance / radius)))
+
+    def target_half_extents(self):
+        """Half width and half length of the rigid target's footprint on the gel."""
+        data = self.cylinder
+        if data is None:
+            specimen = self.suite["specimen"]
+            return specimen["width_m"] / 2, specimen["length_m"] / 2
+        across = data["diameter_m"] / 2 * math.sin(self.cylinder_wrap_rad())
+        along = data["length_m"] / 2
+        return (across, along) if self.across_axis() == 0 else (along, across)
+
+    def target_reference_height(self, clearance):
+        """Height of the rigid body's reference point above first touch.
+
+        The pilot node drives the whole target, so it is placed where the body's
+        own reference is: the far face of a slab, the axis of a cylinder.
+        """
+        data = self.cylinder
+        if data is None:
+            return clearance + self.suite["specimen"]["thickness_m"]
+        return clearance + data["diameter_m"] / 2
 
     def refined(self, coarse, key, fallback=True):
         """Add each transient window's own grid to a coarse schedule.
@@ -271,9 +372,15 @@ class PlaneCase:
             "homogenized_orthotropic_fibrous_layer",
         ):
             raise ValueError("Unknown specimen material")
-        for key in ("width_m", "length_m", "thickness_m"):
-            if not math.isfinite(suite["specimen"][key]) or suite["specimen"][key] <= 0:
-                raise ValueError("Specimen dimensions must be positive")
+        if self.cylinder is not None:
+            self.validate_cylinder()
+        else:
+            for key in ("width_m", "length_m", "thickness_m"):
+                if (
+                    not math.isfinite(suite["specimen"][key])
+                    or suite["specimen"][key] <= 0
+                ):
+                    raise ValueError("Specimen dimensions must be positive")
         interval = suite["protocol"]["recorded_interval_s"]
         dt = suite["dataset"]["sample_interval_s"]
         if (
@@ -322,8 +429,12 @@ class PlaneCase:
             raise ValueError("Preload and recorded travel must be continuous")
         if not init["carry_material_and_contact_history_into_recording"]:
             raise ValueError("Plane recording requires the preload history")
-        if any(p["twist_rad"] != 0 or p["y_m"] != 0 for p in points):
-            raise ValueError("This slab fixture supports the prescribed x-slide protocol")
+        if any(p["twist_rad"] != 0 for p in points):
+            raise ValueError("This fixture prescribes translation without twist")
+        if any(p["x_m"] != 0 for p in points) and any(p["y_m"] != 0 for p in points):
+            raise ValueError(
+                "This fixture slides along one axis; declare x_m or y_m, not both"
+            )
         if suite["discretization"].get("gel_mesh", "uniform") not in (
             "uniform",
             "refined",
@@ -355,7 +466,10 @@ class PlaneCase:
                     for a, b in zip(released, released[1:])
                 ):
                     raise ValueError("Release travel must decrease monotonically")
-            if any(p["x_m"] != released[0]["x_m"] for p in released):
+            if any(
+                p["x_m"] != released[0]["x_m"] or p["y_m"] != released[0]["y_m"]
+                for p in released
+            ):
                 raise ValueError("Release must retain the final slide position")
         elif protocol.get("allow_recorded_lift_off", False):
             raise ValueError("Lift-off is only supported in an explicit release phase")
@@ -512,6 +626,72 @@ class PlaneCase:
                 f"{missing.size} are not, first at {missing[0]:.6g} s"
             )
 
+    def validate_cylinder(self):
+        """The cylinder, the patch cut from it, and the grid built on that patch.
+
+        Three things can go wrong with a curved target and none of them announce
+        themselves in the solve. The patch can stop short of the gel while the
+        surface is still close enough to touch, and contact is then silently
+        missing where the target simply ends. The cylinder can be shorter than
+        the gel it slides along, so the contact line runs off its end part way
+        through the slide. And the facets can be coarser than the gel faces that
+        have to sense them, which turns a smooth curve into a shape the sensor
+        reads as a sequence of flats.
+        """
+        from .config import positive
+        from .plane_mesh import texture_edge
+
+        data = self.cylinder
+        if self.bulk["model"] != "rigid":
+            # Only the rigid target is built on the cylinder's lateral surface;
+            # the deformable body the adapter meshes is a slab.
+            raise ValueError("Only a rigid cylinder target is implemented")
+        if data.get("axis") not in ("x", "y"):
+            raise ValueError("A cylinder's axis must lie along x or y")
+        for key in ("diameter_m", "length_m", "maximum_wrap_rad"):
+            positive(data.get(key), f"specimen.{key}")
+        if data["maximum_wrap_rad"] > math.pi / 2 + 1e-12:
+            raise ValueError("A cylinder target may wrap at most a quarter turn")
+        mesh_rules = self.suite["discretization"].get("object_mesh", {})
+        for key in ("curved_target_chord_deviation_m", "curved_target_axial_max_edge_m"):
+            positive(mesh_rules.get(key), f"object_mesh.{key}")
+        radius = data["diameter_m"] / 2
+        if mesh_rules["curved_target_chord_deviation_m"] >= radius:
+            raise ValueError("Chord deviation must be far below the cylinder radius")
+        element = self.gel_face_edge()
+        arc = self.cylinder_arc_edge(texture_edge(self))
+        if arc > element + 1e-12:
+            raise ValueError(
+                f"The cylinder target's facets are {arc * 1000:.3g} mm against "
+                f"{element * 1000:.3g} mm gel faces; the target must be at least as "
+                "fine as the surface that senses it"
+            )
+        across, along = self.across_axis(), 1 - self.across_axis()
+        sensing = self.sensing_face_m()
+        wrap = self.cylinder_wrap_rad()
+        across_half = radius * math.sin(wrap)
+        along_half = data["length_m"] / 2
+        gel_across = sensing[across] / 2
+        rise = radius * (1 - math.cos(wrap))
+        if across_half < gel_across and rise <= self.suite["contact_numerics"][
+            "pinball_radius_m"
+        ]:
+            raise ValueError(
+                "The cylinder target stops short of the gel while its surface is "
+                "still inside the contact pinball; raise maximum_wrap_rad"
+            )
+        gel_along = sensing[along] / 2
+        travel = max(
+            abs(p.get(f"{data['axis']}_m", 0.0))
+            for p in self.suite["protocol"]["keyframes"]
+        )
+        if along_half < gel_along + travel + TARGET_EDGE_MARGIN_M:
+            raise ValueError(
+                "The cylinder must stay longer than the gel it slides along: "
+                f"{2 * along_half * 1000:.3g} mm covers {2 * gel_along * 1000:.3g} mm "
+                f"of gel plus {travel * 1000:.3g} mm of travel with no margin"
+            )
+
     def shortest_wavelength(self):
         """The finest in-plane feature the declared surface height field holds."""
         lengths = [
@@ -550,12 +730,9 @@ class PlaneCase:
             raise ValueError(
                 "minimum_elements_per_shortest_wavelength must be an integer of at least 2"
             )
-        gel = self.suite["sensor"]["gel"]
         surfaces = {
             "the rigid target": texture_edge(self),
-            "the gel contact face": max(
-                gel["width_m"] / gel["elements"][0], gel["length_m"] / gel["elements"][1]
-            ),
+            "the gel contact face": self.gel_face_edge(),
         }
         for name, edge in surfaces.items():
             if edge > wavelength / required + 1e-12:

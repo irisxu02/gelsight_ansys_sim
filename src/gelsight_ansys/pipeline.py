@@ -9,6 +9,7 @@ from .artifacts import write_json
 from .camera import optical_surface
 from .config import Config
 from .contracts import SurfaceState
+from .fem_view import mesh_view
 from .mechanics import AnsysGel
 from .metrics import validate_frame
 from .run_services import RunLifecycle, create_run, prepare_optics, process_frame
@@ -124,6 +125,7 @@ def run(
         summary["render_device"] = renderer.device
         summary["projection_device"] = renderer.device
         with backend(config, directory / "solver", executable, restart=restart) as model:
+            view = mesh_view(directory, config, model)
             reference = model.reference_state()
             markers = Markers(
                 reference, config.optics.marker_spacing_m, config.camera, config.optics
@@ -171,6 +173,10 @@ def run(
                     body_metrics,
                 )
                 metric["timings"]["save_body_s"] = body_elapsed
+                if view is not None:
+                    metric["mesh_color_limits"] = view.render(
+                        index, state, metric, model.last_displacement
+                    )
                 if index:
                     metric["timings"].update(model.last_timings)
                 summary["frames"].append(metric)
@@ -179,6 +185,8 @@ def run(
                 progress(
                     f"Frame {index + 1}/{len(config.trajectory)}: depth={pose.depth_m * 1000:.3f} mm, force={metric['normal_force_n']:.6f} N, solver GPU={gpu['active']}"
                 )
+            if view is not None:
+                view.close()
         if (
             any(p.depth_m > 0 for p in config.trajectory)
             and max(m["normal_force_n"] for m in summary["frames"]) <= 1e-9
@@ -290,6 +298,32 @@ def rerender(source, output, backend=None, progress=print, render_mode=None):
     return directory, summary
 
 
+def matched_render_scale(config, original):
+    """Render a continued run at the scale it was already solved at.
+
+    A --config override states the protocol to carry on with, not the resolution
+    to draw it at: the run being continued has a camera, its saved frames were
+    rendered through that camera, and the restart rules rightly refuse a resume
+    that changes it. Restating the scale on the command line is a trap.
+
+    The scale is the run's own camera against the nominal one its setup declares,
+    which is what a resolved plane configuration means by it. Deriving it from
+    the two configs instead would read any genuine difference of camera - a
+    different sensor, a different field of view - as a scale, and silently let a
+    resume past the guard that exists to catch exactly that.
+    """
+    if not original.is_plane or config.camera == original.camera:
+        return config
+    nominal = original.specification.suite["sensor"]["camera"]["width_px"]
+    scale, remainder = divmod(original.camera.width_px, nominal)
+    if remainder:
+        raise ValueError(
+            f"The run's {original.camera.width_px} px camera is not a whole "
+            f"multiple of the {nominal} px its setup declares"
+        )
+    return config.with_render_scale(scale)
+
+
 def resume_run(
     source,
     output,
@@ -308,7 +342,7 @@ def resume_run(
 
     source = Path(source)
     original = Config.load(source / "config.json", validate=False)
-    config = original if config is None else config
+    config = original if config is None else matched_render_scale(config, original)
     if original.is_plane:
         from .plane_restart import validate_plane_resume
 

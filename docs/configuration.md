@@ -125,7 +125,8 @@ is implemented for every mechanical adapter.
 | `sphere` | Rigid, linear elastic, Neo-Hookean, or Mooney–Rivlin | Constant Coulomb friction; rigid rotation and translation; deformable translation |
 | `flat` | Rigid | Constant Coulomb friction; rotation and translation |
 | `mesh` | Rigid surface or linear/Neo-Hookean/Mooney–Rivlin hex volume | Constant Coulomb friction; rigid translation/z twist; deformable translation |
-| `plane` | Rigid, Neo-Hookean with optional Prony relaxation, Ogden hyperfoam, or effective fabric | Constant or exponential velocity-dependent Coulomb friction, directional friction, roughness, and reversible adhesion; configured normal travel and x sliding |
+| `plane` | Rigid, Neo-Hookean with optional Prony relaxation, Ogden hyperfoam, or effective fabric | Constant or exponential velocity-dependent Coulomb friction, directional friction, roughness, and reversible adhesion; configured normal travel or load, sliding along one axis |
+| `cylinder` | Rigid | As `plane`, minus a deformable body; the target is the cylinder's lateral surface |
 
 `plane` means a finite slab with a top-face fixture. Its shared setup uses
 physical-time preload and press/hold/slide/hold recording with coverage checks.
@@ -239,6 +240,89 @@ on the stiffest specimen; `protocol.normal_control` switches the mode.
 integrated with mass, and how to size a transient window. A case that ships as
 a worked example rather than a dataset preset can carry
 `"status": "capability_example"`, which preset discovery and export leave alone.
+
+## Custom gel pads
+
+The `gel` block describes the sensor's own pad, independently of the object
+pressed onto it. A pad that narrows towards its sensing face adds three keys:
+
+```json
+"gel": {
+  "width_m": 0.02525, "length_m": 0.02075, "thickness_m": 0.005,
+  "top_width_m": 0.022, "top_length_m": 0.016, "taper_height_m": 0.002,
+  "elements": [36, 30, 10]
+}
+```
+
+This is a 25.25 × 20.75 mm backing, 3 mm of straight wall, then 2 mm tapering to
+a 22 × 16 mm sensing face. `width_m`, `length_m` and `thickness_m` keep their
+meaning - the backing and the total height - and the three new keys are declared
+together or not at all. The contact face is what a curved target's reach is
+judged against, so a cylinder over a tapered pad gets a patch sized for the
+narrowed face rather than the wider backing.
+
+Element counts apply to the whole pad, and whatever rule grades the depth - a
+uniform axis, `through_thickness_bias`, the refined gel mesh, an explicit element
+size - is applied as it always was, with a node level joined to it exactly where
+the taper begins. A layer straddling that boundary would build a chamfer of the
+declared shape rather than the shape; a layer count chosen to suit the taper, as
+the shipped pad's ten are, already lands on it and adds nothing. [`custom_gel_press`](../configs/custom_gel_press.json) presses a
+rigid sphere onto one in 13 frames;
+[`custom_gel_cylinder_slide`](../configs/custom_gel_cylinder_slide/cylinder_20mm.json)
+runs the 4 N cylinder protocol on the same pad with the sensor mounted a quarter
+turn round, so the cylinder lies along x and slides along x. On a face that is
+22 mm one way and 16 mm the other, that is not a relabelling: the contact line
+runs the wide side instead of the narrow one, and the same 4 N is carried by a
+longer line.
+[Marker arrays and pad profiles](sensor-alignment.md#a-pad-that-narrows-towards-its-sensing-face)
+
+## Cylinders
+
+Set `object.geometry.shape` to `"cylinder"` to press a rigid cylinder onto the
+gel through the same finite-target adapter, setup file and protocol a `plane`
+case uses:
+
+```json
+"object": {
+  "geometry": {
+    "shape": "cylinder",
+    "diameter_m": 0.02,
+    "length_m": 0.05,
+    "axis": "y"
+  },
+  "material": { "case": "../materials/rigid.json" }
+}
+```
+
+`axis` is the gel axis the cylinder lies along, so a slide declared on that same
+axis runs along the cylinder's own length and one declared on the other axis
+sweeps the contact band across the sensor. The cylinder must outlast the gel
+plus the whole slide along its axis; a shorter one is refused rather than
+allowed to run its contact band off its own end.
+
+The solver never sees a whole cylinder. It sees a patch cut from the lateral
+surface, gridded in the angle so every facet has the same chord deviation, and
+tangent to the undeformed gel at a node rather than across a chord. Two settings
+in the setup's `discretization.object_mesh` size it, and one in `specimen` bounds
+it:
+
+| Setting | Meaning |
+|---|---|
+| `curved_target_chord_deviation_m` | How far a facet's chord may sag below the surface it stands for. This sets the facet arc length, capped by `rigid_texture_max_edge_m`. |
+| `curved_target_axial_max_edge_m` | Facet length along the axis. The surface is exactly straight there, so this carries no geometric error. |
+| `specimen.maximum_wrap_rad` | How far round the cylinder the patch may reach, at most a quarter turn. |
+
+The patch stops at whichever comes first, the wrap limit or 2 mm past the gel.
+Where it stops short of the gel, validation requires the surface to have already
+climbed further than the contact pinball, so the truncation can only remove
+facets that could not have touched.
+
+A cylinder touches along a band, not over the footprint, so its setup states
+acceptance differently from a slab's: no fraction of contact bins is required,
+and the geometry rules are measured over the sensor nodes that carry load
+(`contact_acceptance.edge_margin_scope: loaded_sensor_nodes`) rather than over
+all of them. What a cylinder run can still fail is having no contact at all, or
+letting its loaded band run off the edge of the target.
 
 ## Custom object meshes
 

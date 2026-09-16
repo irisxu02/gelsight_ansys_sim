@@ -16,6 +16,47 @@ class Mesh:
     material_ids: np.ndarray
 
 
+# The six faces of a hexahedron in the node order tensor_mesh uses, each wound
+# outwards. Imported meshes are read against the same convention.
+HEX_FACES = np.array(
+    ((0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7))
+)
+
+
+def exterior_faces(hexes):
+    """Outward-wound boundary quads of a hexahedral body.
+
+    A face on the boundary is one that a single element claims; an interior face
+    is claimed by the two elements that share it.
+    """
+    faces = np.asarray(hexes)[:, HEX_FACES].reshape(-1, 4)
+    _, inverse, counts = np.unique(
+        np.sort(faces, axis=1), axis=0, return_inverse=True, return_counts=True
+    )
+    return faces[counts[inverse] == 1]
+
+
+def with_level(levels, height):
+    """A depth axis with a node exactly at a height, whatever graded it.
+
+    A gel that narrows has its cross-section scaled node by node, so an element
+    layer straddling the start of the taper would cut its corner and build a
+    chamfer of the declared shape rather than the shape. Inserting the boundary
+    into whichever axis the mesh rules produced keeps those rules intact and
+    needs no second axis builder; where the boundary already falls on a node,
+    which is what a layer count chosen to suit it gives, that node is snapped
+    onto it rather than joined by a second one a rounding error away - two
+    levels that close would be an element layer of no thickness.
+    """
+    levels = np.asarray(levels, dtype=float)
+    nearest = int(np.argmin(np.abs(levels - height)))
+    if abs(levels[nearest] - height) > 1e-9 * np.ptp(levels):
+        return np.unique(np.r_[levels, height])
+    levels = levels.copy()
+    levels[nearest] = height
+    return levels
+
+
 def biased_axis(half_extent, elements, bias):
     """Smooth symmetric grading; positive bias refines the central contact zone."""
     q = np.linspace(-1.0, 1.0, elements + 1)
@@ -48,6 +89,23 @@ def contact_axis(half_extent, elements, core_half_extent, size):
     return np.r_[-positive[:0:-1], positive]
 
 
+def tapered(mesh, gel):
+    """Narrow a prismatic grid towards its contact face.
+
+    The topology is the prism's; only the coordinates move. Everything built on
+    the grid - the surface quads that carry contact, the bottom nodes that are
+    held, the marker attachments - therefore stays exactly what it was.
+    """
+    # Zero below the taper, one at the contact face.
+    fraction = np.clip(1 + mesh.coordinates[:, 2] / gel.taper_height_m, 0.0, 1.0)
+    for axis, top, backing in (
+        (0, gel.top_width_m, gel.width_m),
+        (1, gel.top_length_m, gel.length_m),
+    ):
+        mesh.coordinates[:, axis] *= 1 + fraction * (top / backing - 1)
+    return mesh
+
+
 def structured_mesh(gel):
     nx, ny, nz = gel.elements
     if gel.contact_element_size_m is None:
@@ -69,7 +127,10 @@ def structured_mesh(gel):
     q = np.linspace(1.0, 0.0, nz + 1)
     bias = gel.through_thickness_bias
     q = np.expm1(bias * q) / np.expm1(bias) if bias else q
-    return tensor_mesh(x, y, -gel.thickness_m * q)
+    z = -gel.thickness_m * q
+    if not gel.tapered:
+        return tensor_mesh(x, y, z)
+    return tapered(tensor_mesh(x, y, with_level(z, -gel.taper_height_m)), gel)
 
 
 def tensor_mesh(x, y, z):
@@ -156,24 +217,7 @@ def sphere_mesh(indenter, center):
         a, b = q[:, other[0]] ** 2, q[:, other[1]] ** 2
         xyz[:, axis] = q[:, axis] * np.sqrt(1 - a / 2 - b / 2 + a * b / 3)
     xyz *= indenter.radius_m
-    # Boundary faces oriented outwards, obtained from each hex's six local faces.
-    faces = cube.hexes[
-        :,
-        np.array(
-            (
-                (0, 3, 2, 1),
-                (4, 5, 6, 7),
-                (0, 1, 5, 4),
-                (1, 2, 6, 5),
-                (2, 3, 7, 6),
-                (3, 0, 4, 7),
-            )
-        ),
-    ].reshape(-1, 4)
-    _, inverse, counts = np.unique(
-        np.sort(faces, axis=1), axis=0, return_inverse=True, return_counts=True
-    )
-    boundary = faces[counts[inverse] == 1]
+    boundary = exterior_faces(cube.hexes)
     boundary_nodes = np.unique(boundary)
     grip = boundary_nodes[
         xyz[boundary_nodes, 2] >= indenter.grip_height_fraction * indenter.radius_m

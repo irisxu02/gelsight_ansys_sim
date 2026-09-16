@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from .mesh import ObjectMesh, structured_mesh, tensor_mesh
+from .mesh import ObjectMesh, structured_mesh, tapered, tensor_mesh, with_level
 
 
 def depth_axis(thickness, size, refined_depth, growth=1.3):
@@ -57,7 +57,12 @@ def gel_mesh(case, element_size=None):
         rules["refined_depth_into_each_deformable_body_m"],
         rules["maximum_element_growth_ratio"],
     )[::-1]
-    return tensor_mesh(x, y, z)
+    from .config import Gel
+
+    gel = Gel(**data)
+    if not gel.tapered:
+        return tensor_mesh(x, y, z)
+    return tapered(tensor_mesh(x, y, with_level(z, -gel.taper_height_m)), gel)
 
 
 def slab_mesh(
@@ -111,8 +116,77 @@ def texture_edge(case, object_mode="simplified"):
     )
 
 
+def texture_peak(case):
+    """Height of the highest asperity a declared texture reaches.
+
+    A target is built at first touch, so the texture is measured inward from its
+    peak: that is the surface the protocol's travels are zeroed on, and both the
+    flat and the curved target have to agree on it.
+    """
+    return sum(
+        mode["amplitude_m"] for mode in case.case["surface_geometry"].get("modes", [])
+    )
+
+
+def target_faces(rows, columns):
+    """Quads of a (rows x columns) node grid, wound so the normal faces the gel.
+
+    Node numbering runs across the grid's columns fastest, which is how every
+    target here is raveled. The winding is the one a flat target already used:
+    its normal points along -z, towards the sensor.
+    """
+    node = np.arange(rows * columns).reshape(rows, columns)
+    return np.stack(
+        (node[:-1, :-1], node[1:, :-1], node[1:, 1:], node[:-1, 1:]), axis=-1
+    ).reshape(-1, 4)
+
+
+def cylindrical_target(case, clearance, element_size=None, *, object_mode="simplified"):
+    """Facets on a rigid cylinder's lateral surface, tangent to the gel at first touch.
+
+    The patch is gridded in the angle rather than in x: an equal-x grid crowds
+    its facets where the surface is flat and stretches them where it curves, and
+    near the widest point of a small cylinder the facets turn vertical. Equal
+    arc length gives every facet the same chord deviation, which is the quantity
+    the target is sized by.
+    """
+    data = case.cylinder
+    radius = data["diameter_m"] / 2
+    wrap = case.cylinder_wrap_rad()
+    arc = case.cylinder_arc_edge(element_size or texture_edge(case, object_mode))
+    # An even number of intervals puts a node on the cylinder's lowest line.
+    # Without one, first touch is a facet chord sitting a fraction of a
+    # micrometre above the surface it stands for, and every travel in the
+    # protocol is measured from a reference the target does not actually reach.
+    divisions = int(np.ceil(2 * wrap * radius / arc))
+    angle = np.linspace(-wrap, wrap, divisions + divisions % 2 + 1)
+    axial_edge = (
+        element_size
+        or case.suite["discretization"]["object_mesh"]["curved_target_axial_max_edge_m"]
+    )
+    length = data["length_m"]
+    axial = np.linspace(
+        -length / 2, length / 2, int(np.ceil(length / axial_edge)) + 1
+    )
+    across, rise = radius * np.sin(angle), radius * (1 - np.cos(angle))
+    # Rows run along y and columns along x, whichever the cylinder's axis is.
+    if data["axis"] == "y":
+        x, y, height = across, axial, rise
+    else:
+        x, y, height = axial, across, rise[:, None]
+    yy, xx = np.meshgrid(y, x, indexing="ij")
+    # A texture is measured from the lateral surface, inward as for a flat target.
+    z = clearance + height + texture_peak(case) - case.surface_height(xx, yy)
+    points = np.column_stack((xx.ravel(), yy.ravel(), z.ravel()))
+    return points, target_faces(len(y), len(x))
+
+
 def textured_target(case, clearance, element_size=None, *, object_mode="simplified"):
     specimen = case.suite["specimen"]
+    if case.cylinder is not None:
+        return cylindrical_target(
+            case, clearance, element_size, object_mode=object_mode
+        )
     if object_mode == "simplified" and not case.case["surface_geometry"].get("modes"):
         hx, hy = specimen["width_m"] / 2, specimen["length_m"] / 2
         # One exact plane facet removes artificial internal target boundaries.
@@ -137,16 +211,7 @@ def textured_target(case, clearance, element_size=None, *, object_mode="simplifi
         int(np.ceil(specimen["length_m"] / size)) + 1,
     )
     yy, xx = np.meshgrid(y, x, indexing="ij")
-    height = case.surface_height(xx, yy)
     # Positive texture height protrudes towards the sensor.
-    peak = sum(
-        mode["amplitude_m"] for mode in case.case["surface_geometry"].get("modes", [])
-    )
-    points = np.column_stack(
-        (xx.ravel(), yy.ravel(), (clearance + peak - height).ravel())
-    )
-    node = np.arange(len(points)).reshape(len(y), len(x))
-    faces = np.stack(
-        (node[:-1, :-1], node[1:, :-1], node[1:, 1:], node[:-1, 1:]), axis=-1
-    ).reshape(-1, 4)
-    return points, faces
+    height = texture_peak(case) - case.surface_height(xx, yy)
+    points = np.column_stack((xx.ravel(), yy.ravel(), (clearance + height).ravel()))
+    return points, target_faces(len(y), len(x))

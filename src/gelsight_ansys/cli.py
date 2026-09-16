@@ -295,7 +295,7 @@ def main(argv=None):
             config = configure_run(Config.load(args.config), args)
             if args.dry_run:
                 plane = config.is_plane
-                shape = "plane" if plane else config.indenter.shape
+                shape = config.indenter.shape
                 material = (
                     config.specification.bulk["model"]
                     if plane

@@ -10,6 +10,7 @@ from PIL import Image
 from .artifacts import write_json
 from .camera import optical_surface
 from .config import Camera
+from .fem_view import mesh_view
 from .plane_coverage import ContactCoverage
 from .plane_mechanics import AnsysPlane
 from .run_contract import completion_status
@@ -68,6 +69,7 @@ def render_plane_frame(
     gpu,
     coverage,
     bin_force,
+    view=None,
 ):
     started = time.perf_counter()
     # Store force fields on the nominal grid; render optical rays at full resolution.
@@ -91,6 +93,12 @@ def render_plane_frame(
     np.savez_compressed(
         directory / "contact" / f"frame_{index:04d}.npz", **model.contact_details
     )
+    if view is not None:
+        # The same converged state the dataset frame was written from, drawn on
+        # the mesh it was solved on.
+        metric["mesh_color_limits"] = view.render(
+            index, state, metric, model.last_displacement
+        )
     metric["timings"] = {
         **metric["timings"],
         **model.last_timings,
@@ -226,6 +234,7 @@ def run_plane(
             baseline = render_unloaded_reference(reference, config, renderer, markers)
             Image.fromarray(baseline).save(directory / "unloaded_reference.png")
             coverage = ContactCoverage(case, reference.reference_m, reference.quads)
+            view = mesh_view(directory, config, model)
             summary["mesh"] = {
                 "gel_nodes": len(model.mesh.coordinates),
                 "gel_hexes": len(model.mesh.hexes),
@@ -316,6 +325,7 @@ def run_plane(
                     gpu,
                     check,
                     bins,
+                    view,
                 )
                 summary["frames"].append(metric)
                 summary["gpu_mechanics_verified"] |= gpu["active"]
@@ -356,6 +366,8 @@ def run_plane(
                 if index is None:
                     continue
                 save_frame(float(at), index, last)
+            if view is not None:
+                view.close()
         if (
             case.suite["protocol"].get("release", False)
             and summary["complete_recorded_interval"]

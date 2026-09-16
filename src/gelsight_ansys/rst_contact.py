@@ -9,12 +9,43 @@ upgrades; recorded element forces retain the precision present in the RST file.
 import numpy as np
 
 
+def two_ints_to_long(low, high):
+    """One 64-bit file offset from the two 32-bit words MAPDL stores it in.
+
+    The words arrive as numpy int32, which cannot be masked against 0xFFFFFFFF
+    in its own width, so each is widened to a Python integer first.
+    """
+    return ((int(high) & 0xFFFFFFFF) << 32) | (int(low) & 0xFFFFFFFF)
+
+
+def allow_large_result_files():
+    """Let the reader address result files past a 2 GiB pointer boundary.
+
+    MAPDL keeps each 64-bit file offset as two 32-bit words. The reader
+    reassembles them by packing both as unsigned, but reads them from the file
+    as signed, so the low word turns negative the moment an offset crosses a
+    2 GiB boundary and the pack raises struct.error. A transient slide writes
+    every converged substep, so a plane run reaches that point tens of
+    gigabytes in - a 100 mm cylinder hit it 30.7 GB and 259 frames into its
+    record, with every frame it had already written still perfectly good.
+
+    Masking each word restores the unsigned value the format actually holds.
+    It cannot disturb a file that reads correctly today: for a non-negative
+    word the mask is the identity, so the only offsets it changes are the ones
+    that currently raise.
+    """
+    from ansys.mapdl.reader import common
+
+    common.two_ints_to_long = two_ints_to_long
+
+
 class ContactResult:
     def __init__(
         self, path, first_element, count, user_values_per_point=0, nonmisc_base=197
     ):
         from ansys.mapdl.reader.rst import Result
 
+        allow_large_result_files()
         self.result = Result(path, read_mesh=False, parse_vtk=False)
         numbers = self.result._eeqv
         selected = np.flatnonzero(

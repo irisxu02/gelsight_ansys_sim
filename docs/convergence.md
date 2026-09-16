@@ -264,10 +264,49 @@ So a setup that slides may declare which region the requirement speaks for:
 }
 ```
 
-Only bin activity is scoped. Geometric footprint coverage, edge margin and total
-repulsive normal force stay gated on the whole outer sensor surface, and
+`region` scopes bin activity only. Geometric footprint coverage, edge margin and
+total repulsive normal force stay gated on the whole outer sensor surface, and
 `active_bin_fraction` for that whole surface is recorded in every frame beside
 the scoped one. Omit `region` and nothing changes.
+
+### A target that is not meant to cover the sensor
+
+Full-footprint contact is the right requirement for a slab wider than the gel.
+It is the wrong one for a cylinder, which touches along a band by construction:
+most bins carry nothing at any load, so `required_active_bin_fraction` is 0 in
+the cylinder setup and the record's bin fraction becomes a measurement of the
+band's width rather than a gate.
+
+What such a run can still fail is worth stating, because dropping the bin gate
+leaves only two checks with teeth. `minimum_total_repulsive_normal_force_n` says
+there is contact at all. The geometry rules say the load sits inside the target
+rather than running off its edge - but measured over the whole sensor they would
+fail on every frame, since a 20 mm cylinder's patch reaches 8.7 mm across a
+12.6 mm half width. So the setup scopes them:
+
+```json
+"contact_acceptance": {
+  "edge_margin_scope": "loaded_sensor_nodes",
+  "minimum_geometric_footprint_coverage_fraction": 1,
+  "minimum_plane_edge_margin_m": 0.0005
+}
+```
+
+Coverage then reads "every sensor node carrying load is under the target" and
+the margin reads "and none of them is within 0.5 mm of its edge", which is the
+statement that was wanted all along. The default, `all_sensor_nodes`, is what
+every slab setup uses and leaves those runs unchanged.
+
+`edge_margin_scope` selects which pair the thresholds speak for; it does not
+change what is measured. Every frame records both -
+`minimum_plane_edge_margin_m` and `geometric_footprint_coverage_fraction` over
+the whole sensor surface, `loaded_edge_margin_m` and
+`loaded_footprint_coverage_fraction` over the nodes carrying load, with
+`loaded_sensor_node_count` beside them so a frame that passes on a handful of
+nodes says so. That is the same rule the bin region follows: a key means one
+thing in every run, and the setup says which one is gated. The acceptance
+failure names the region it judged, so a rejected frame says whether the sensor
+or the loaded band fell short.
 
 ## Travel control and load control
 

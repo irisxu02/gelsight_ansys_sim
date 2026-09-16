@@ -33,6 +33,17 @@ class Gel:
     through_thickness_bias: float = 0.0
     contact_element_size_m: float | None = None
     refinement_half_extents_m: tuple[float, float] = (0.0036, 0.003)
+    # A gel that narrows towards the surface it senses with. width/length/
+    # thickness stay the backing the gel is bonded to; these three describe the
+    # contact face and how far down the transition to it reaches. All three
+    # together or none: a pad that narrows is one shape, not three settings.
+    top_width_m: float | None = None
+    top_length_m: float | None = None
+    taper_height_m: float | None = None
+
+    @property
+    def tapered(self):
+        return self.top_width_m is not None
 
 
 @dataclass(frozen=True)
@@ -152,6 +163,14 @@ class Solver:
     # Cut back on a predicted iteration count (CUTCONTROL,NOITERPREDICT) rather
     # than on an actual failure to converge. ANSYS predicts by default.
     predict_cutback: bool = True
+    # Which converged substeps reach the result file, and so which ones can be
+    # checked and rendered. "every_substep" records the whole nonlinear path;
+    # "each_checkpoint" records the last substep of each load step, which is the
+    # instant a frame is written from. A slide that bisects to a few 1e-5 s
+    # solves hundreds of substeps between checkpoints and writes a couple of
+    # megabytes for each, so the choice decides whether the file stays in the
+    # tens of megabytes or reaches the hundreds of gigabytes.
+    result_substeps: str = "every_substep"
 
 
 @dataclass(frozen=True)
@@ -201,6 +220,11 @@ class Visualization:
     marker_key_um: float = 100.0
     save_panel_frames: bool = False
     save_tactile_gif: bool = False
+    # A finite-element view of the solved bodies, written while the run solves.
+    # It reads the same saved mesh and nodal solution the dataset already holds,
+    # so switching it off costs nothing but the pictures.
+    save_mesh_frames: bool = False
+    mesh_deformation_scale: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -268,7 +292,13 @@ class Config:
 
     @property
     def is_plane(self):
-        return self.indenter.shape == "plane"
+        """Whether the finite-target adapter drives this run.
+
+        A flat slab and a cylinder differ in the shape of the target surface and
+        in nothing else: both are driven by a physical-time suite, solved by the
+        same adapter, and read back by the same result reader.
+        """
+        return self.indenter.shape in ("plane", "cylinder")
 
     def suite_updated(self, **sections):
         """Restate suite settings a runtime override changed.
@@ -429,7 +459,11 @@ class Config:
     def validate(self):
         positive(self.visualization.marker_scale, "visualization.marker_scale")
         positive(self.visualization.marker_key_um, "visualization.marker_key_um")
-        for key in ("save_panel_frames", "save_tactile_gif"):
+        positive(
+            self.visualization.mesh_deformation_scale,
+            "visualization.mesh_deformation_scale",
+        )
+        for key in ("save_panel_frames", "save_tactile_gif", "save_mesh_frames"):
             if type(getattr(self.visualization, key)) is not bool:
                 raise ValueError(f"visualization.{key} must be boolean")
         if self.schema_version != 4:
@@ -466,6 +500,7 @@ class Config:
             value = getattr(self.gel, name)
             if not math.isfinite(value) or not 0 <= value <= 4:
                 raise ValueError(f"gel.{name} must be in [0, 4]")
+        self.validate_taper()
         self.material.validate()
         self.indenter.material.validate("indenter.material")
         if type(self.indenter.deformable) is not bool:
@@ -491,8 +526,10 @@ class Config:
             if value is not None:
                 positive(value, f"indenter.{key}")
         positive(self.indenter.tangential_stiffness_factor, "tangential_stiffness_factor")
-        if self.indenter.shape not in ("sphere", "flat", "plane", "mesh"):
-            raise ValueError("indenter.shape must be sphere, flat, plane, or mesh")
+        if self.indenter.shape not in ("sphere", "flat", "plane", "cylinder", "mesh"):
+            raise ValueError(
+                "indenter.shape must be sphere, flat, plane, cylinder, or mesh"
+            )
         for key in (
             "radius_m",
             "half_width_m",
@@ -562,6 +599,10 @@ class Config:
         ):
             if type(value) is not int or value < 1:
                 raise ValueError("Solver counts must be positive integers")
+        if self.solver.result_substeps not in ("every_substep", "each_checkpoint"):
+            raise ValueError(
+                "solver.result_substeps must be every_substep or each_checkpoint"
+            )
         if self.solver.equation_solver not in ("sparse", "mixed"):
             raise ValueError("equation_solver must be sparse or mixed")
         if self.solver.newton_raphson not in ("full", "unsymmetric"):
@@ -697,6 +738,23 @@ class Config:
                 )
 
         return self
+
+    def validate_taper(self):
+        """A gel that narrows towards its contact face, if it declares one."""
+        gel = self.gel
+        declared = (gel.top_width_m, gel.top_length_m, gel.taper_height_m)
+        if all(value is None for value in declared):
+            return
+        if any(value is None for value in declared):
+            raise ValueError(
+                "A tapered gel needs top_width_m, top_length_m and taper_height_m"
+            )
+        for key in ("top_width_m", "top_length_m", "taper_height_m"):
+            positive(getattr(gel, key), f"gel.{key}")
+        if gel.top_width_m > gel.width_m or gel.top_length_m > gel.length_m:
+            raise ValueError("A tapered gel's contact face cannot exceed its backing")
+        if gel.taper_height_m >= gel.thickness_m:
+            raise ValueError("The taper must be shorter than the gel it is cut into")
 
     def to_dict(self):
         return json.loads(

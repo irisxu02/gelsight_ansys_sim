@@ -66,8 +66,17 @@ Solver GPU acceleration is available as an explicit option.
 - **Material comparison:** finite slabs with rubber, compressible foam,
   effective fabric, and rigid reference surfaces; configurable relaxation,
   directional friction, roughness, and adhesion.
+- **[Force-controlled curved objects](docs/configuration.md#cylinders):** rigid
+  cylinders pressed to a commanded normal load, held, and slid with the load
+  maintained. Diameter, length and axis are config parameters.
+- **[Custom gel pads](docs/configuration.md#custom-gel-pads):** a pad that
+  narrows towards its sensing face, with its own marker array declared in
+  physical units.
 - **Tactile rendering and measurements:** CUDA projection and optics, material
   marker tracking, surface deformation, forces and torques, and PNG/GIF previews.
+- **[Finite-element views](docs/dataset.md#finite-element-views):** the deformed
+  mesh with its element edges, contoured by contact pressure and by total
+  displacement, written frame by frame while the run solves.
 
 ## Quick start
 
@@ -174,6 +183,25 @@ retaining the default mechanical checkpoints. Mechanical time steps and object
 mesh resolution can be benchmarked separately.
 [Sampling and performance controls](docs/usage.md#mechanical-steps-and-saved-frames)
 
+### Cylinders under a commanded load
+
+Press a rigid cylinder onto the gel at a fixed 4 N, hold it, and slide 2 mm
+along its own axis with the load maintained:
+
+```bash
+python scripts/run_simulation.py run --config configs/cylinder_press_slide/cylinder_20mm.json --render-scale 4
+```
+
+The two shipped diameters, 100 mm and 20 mm, press at the same load rather than
+the same travel, so what separates them is curvature alone: the wide cylinder
+spreads 4 N over most of the imaged region while the narrow one concentrates it
+in a band a few millimetres across. Travel is a result to read, not a setting.
+Copy a preset and change `object.geometry` for another diameter, length or axis;
+`configs/cylinder_press_slide/suite.json` holds the sensor, protocol and numerics
+the cases share.
+[Cylinder geometry](docs/configuration.md#cylinders) ·
+[Load control](docs/plane-material-adapters.md)
+
 ### Mesh and GPU options
 
 General contact presets use a uniform 36 × 30 × 8 gel mesh. Add
@@ -215,6 +243,7 @@ Use them as starting points for your own geometry.
 |---|---|---|
 | [imported_rigid_press](configs/imported_rigid_press.json) | Indent and release | Rigid block imported from STL |
 | [imported_soft_press](configs/imported_soft_press.json) | Indent and release | Deformable 50 kPa block imported from a JSON hex mesh |
+| [custom_gel_press](configs/custom_gel_press.json) | Indent and release | Rigid sphere on a pad tapering to a 22 × 16 mm face, 11 × 17 array of 0.5 mm markers |
 
 ### Material comparison presets
 
@@ -230,8 +259,24 @@ Use `python scripts/run_simulation.py run --config PATH` for these examples.
 | [plane_rough_surface](configs/material_plane_slide/rough_surface.json) | Press, hold, slide, hold | Rigid slab with resolved sinusoidal surface texture |
 | [plane_sticky_surface](configs/material_plane_slide/sticky_surface.json) | Press, hold, slide, hold | Smooth rigid slab; reversible adhesion and cohesive shear |
 
+### Curved object presets
+
+Both presets are pressed to a commanded 4 N, held, slid 2 mm along the cylinder
+axis at 5 mm/s under the same load, and held again.
+
+| Preset | Motion | Object / material |
+|---|---|---|
+| [cylinder_100mm](configs/cylinder_press_slide/cylinder_100mm.json) | Press to 4 N, hold, slide, hold | Rigid smooth cylinder, 100 mm diameter x 50 mm, axis along y |
+| [cylinder_20mm](configs/cylinder_press_slide/cylinder_20mm.json) | Press to 4 N, hold, slide, hold | Rigid smooth cylinder, 20 mm diameter x 50 mm, axis along y |
+| [custom_gel_cylinder_100mm](configs/custom_gel_cylinder_slide/cylinder_100mm.json) | Press to 4 N, hold, slide, hold | The 100 mm cylinder on the tapered custom pad, sensor turned a quarter so the axis and slide run along x |
+| [custom_gel_cylinder_20mm](configs/custom_gel_cylinder_slide/cylinder_20mm.json) | Press to 4 N, hold, slide, hold | The 20 mm cylinder on the same turned tapered pad |
+
 Select a preset with `--config`. The [example guide](docs/examples/README.md)
-describes the trajectories, object materials, and export format. Each run saves
+lists what each one shows and [what it costs to run](docs/examples/README.md#choosing-one),
+and describes the trajectories, object materials, and export format.
+To work through several, queue them with
+[`run_examples.py`](docs/usage.md#run-several-examples); one solver checkout
+means starting them at once is no faster. Each run saves
 its resolved configuration, measurements, and validation results. The
 [detached high-resolution queue](docs/usage.md#detached-high-resolution-example-queue)
 exports checked examples into `docs/examples/<config_name>/`.
@@ -262,6 +307,16 @@ Exact signed RGB differences are also saved in the NPZ fields. Plane runs save
 raw RGB and signed differences during the solve; the replay command above
 currently supports general-contact runs only.
 [Optical response and subtraction](docs/usage.md#raw-rgb-and-background-subtraction)
+
+Runs that ask for it also write `mesh/frame_*.png` and `mesh.gif`: the deformed
+finite-element mesh with its element edges, contoured by contact pressure on the
+contact surface and by total nodal displacement on the gel body, with the rigid
+object drawn over it as grid lines. Set `visualization.save_mesh_frames` to
+enable it and `visualization.mesh_deformation_scale` to exaggerate the shape.
+Contour limits grow with the run in 1-2-5 steps and are recorded per frame in
+`summary.json`. Any finished run can be drawn afterwards with
+`python scripts/render_mesh_views.py --run outputs/YOUR_COMPLETED_RUN`.
+[Finite-element views](docs/dataset.md#finite-element-views)
 
 Marker arrows are enlarged 10× with a 100 µm actual-displacement key. Saved
 physical data and tactile images retain their actual motion scale.

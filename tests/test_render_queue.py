@@ -88,17 +88,27 @@ class RenderQueueTests(unittest.TestCase):
     def test_plane_and_indenter_configs_are_all_discovered(self):
         root = Path(__file__).resolve().parents[1]
         jobs, blocked = discover(root / "configs", 4)
-        self.assertEqual(len(jobs), 14)
+        self.assertEqual(len(jobs), 17)
         self.assertEqual(blocked, [])
         self.assertTrue(all(j["resolution"] == [1280, 960] for j in jobs))
-        self.assertEqual(sum(j["kind"] == "plane" for j in jobs), 7)
-        # Every plane preset shares one protocol, so they share a frame count.
-        expected = len(
-            Config.load(root / "configs/material_plane_slide/soft_rubber.json").trajectory
-        )
-        self.assertTrue(
-            all(j["frame_count"] == expected for j in jobs if j["kind"] == "plane")
-        )
+        self.assertEqual(sum(j["kind"] == "plane" for j in jobs), 9)
+        # Presets of one suite share its schedule, so they share a frame count.
+        # The two suites no longer agree: the cylinders slide 4 mm where the
+        # slabs slide 2 mm, which is 0.4 s and 40 frames more.
+        for preset, count in (
+            ("material_plane_slide/soft_rubber", 311),
+            ("cylinder_press_slide/cylinder_20mm", 351),
+        ):
+            expected = len(Config.load(root / f"configs/{preset}.json").trajectory)
+            self.assertEqual(expected, count)
+            family = preset.split("/")[0]
+            same = [
+                j
+                for j in jobs
+                if j["kind"] == "plane" and j["config"].startswith(family)
+            ]
+            self.assertTrue(same)
+            self.assertTrue(all(j["frame_count"] == expected for j in same))
         self.assertEqual(jobs[0]["name"], "sphere_press")
 
     def test_removed_presets_cannot_resume_and_history_is_preserved(self):
@@ -407,18 +417,56 @@ class PublishingSurvivesReadersTests(unittest.TestCase):
 
 
 class OrphanedSolverTests(unittest.TestCase):
+    def psutil_stub(self, **overrides):
+        stub = SimpleNamespace(
+            Error=RuntimeError,
+            NoSuchProcess=ProcessLookupError,
+            wait_procs=lambda processes, timeout: (processes, []),
+        )
+        for key, value in overrides.items():
+            setattr(stub, key, value)
+        return stub
+
     def test_a_failed_supervision_stops_the_job_it_was_watching(self):
         from gelsight_ansys.batch.render_queue import stop_owned
 
         child = SimpleNamespace(pid=4242)
         owned, descendant = Mock(), Mock()
         owned.children.return_value = [descendant]
-        fake = SimpleNamespace(
-            Process=lambda pid: owned,
-            NoSuchProcess=ProcessLookupError,
-            wait_procs=lambda processes, timeout: (processes, []),
-        )
+        fake = self.psutil_stub(Process=lambda pid: owned)
+        fake.NoSuchProcess = ProcessLookupError
         with patch.dict(sys.modules, {"psutil": fake}):
             stop_owned(child)
         owned.kill.assert_called_once()
         descendant.kill.assert_called_once()
+
+    def test_stopping_a_job_that_already_exited_reports_nothing(self):
+        """It runs while another failure is on its way out and must not replace it."""
+        from gelsight_ansys.batch.render_queue import stop_owned
+
+        class Gone(RuntimeError):
+            pass
+
+        child = SimpleNamespace(pid=4242)
+        # Gone before psutil is asked for it at all.
+        def missing(pid):
+            raise Gone("process PID not found")
+
+        with patch.dict(sys.modules, {"psutil": self.psutil_stub(Process=missing)}):
+            stop_owned(child)
+        # Gone between being found and being asked for its children, which is
+        # what a solver abort looks like from here.
+        owned = Mock()
+        owned.children.side_effect = Gone("process PID not found")
+        with patch.dict(
+            sys.modules, {"psutil": self.psutil_stub(Process=lambda pid: owned)}
+        ):
+            stop_owned(child)
+        # Gone between being listed and being killed.
+        owned = Mock()
+        owned.children.return_value = []
+        owned.kill.side_effect = Gone("process PID not found")
+        with patch.dict(
+            sys.modules, {"psutil": self.psutil_stub(Process=lambda pid: owned)}
+        ):
+            stop_owned(child)

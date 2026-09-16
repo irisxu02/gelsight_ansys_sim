@@ -10,25 +10,10 @@ from gelsight_ansys.mesh import structured_mesh
 from gelsight_ansys.plane_config import PlaneCase
 from gelsight_ansys.plane_mesh import gel_mesh, slab_mesh, textured_target
 from gelsight_ansys.simulation_config import config_for_plane
+from sampling_grid import expected_count
 
 ROOT = Path(__file__).resolve().parents[1]
 
-
-def expected_count(case, coarse_step, key):
-    """Frames or checkpoints: the coarse grid joined with each window's own.
-
-    The suite integrates the slide with mass, and a window keeps its own
-    sampling and checkpoint grid whatever the dataset-level interval is, so
-    coarsening the CLI interval thins only the quasi-static stretches.
-    """
-    start, end = case.suite["protocol"]["recorded_interval_s"]
-    grids = [np.linspace(start, end, round((end - start) / coarse_step) + 1)]
-    for w in case.transient_windows:
-        step = w.get(key, w["time_increment_s"] if key == "solve_interval_s" else None)
-        if step is not None:
-            a, b = w["start_time_s"], w["end_time_s"]
-            grids.append(np.linspace(a, b, round((b - a) / step) + 1))
-    return len(np.unique(np.round(np.concatenate(grids), 12)))
 
 class PlaneMeshTests(unittest.TestCase):
     def case(self, name):
