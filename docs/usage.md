@@ -40,6 +40,71 @@ solver substeps are distinct from saved animation frames. Completion requires
 convergence, preserved loading history, force consistency, and the configured
 GPU checks. [Solver lifecycle](architecture.md#solver-lifecycle-and-contact-results)
 
+## Run several examples
+
+An ANSYS allowance commonly permits one simultaneous solver checkout, so two
+examples started at once do not run twice as fast: the second fails to check
+out a licence and stops. Queue them instead:
+
+```bash
+python scripts/run_examples.py --render-scale 4 \
+  --config configs/sphere_press.json \
+  --config configs/cylinder_press_slide/cylinder_20mm.json
+```
+
+Each runs with the same `run --config` command shown above, in the order given,
+and a table at the end says which succeeded and how long each took. A failure
+stops the queue so the cause is still on screen; `--keep-going` runs the rest
+anyway. `--exec-file`, `--libraries` and `--solver-mode` are passed through.
+
+For the curated dataset presets there is a heavier path that also validates and
+exports each result: see [the example queue](#detached-high-resolution-example-queue).
+
+## Run a long example
+
+The press examples take minutes. A press-and-slide takes hours to a day, and
+three things are worth knowing before starting one.
+
+**It can be stopped at any time.** Frames are written as they are solved, each
+with its own state, fields, images and metrics, so a run that is interrupted -
+or that you stop once it has shown what you needed - leaves a complete, self
+consistent dataset up to its last frame. Only continuing it needs the solver
+files. `--stop-after-s` sets that point in advance:
+
+```bash
+python scripts/run_simulation.py run --config configs/cylinder_press_slide/cylinder_20mm.json \
+  --stop-after-s 2.40 --output outputs/pilot
+```
+
+That is also the cheapest way to see what a preset costs on your machine before
+committing a day to it: the press phase and the first frames of the slide in
+under an hour.
+
+**The slide is where the time goes, and it is the solver's time.** Measured on
+one 4 mm cylinder slide: 5.3 s per frame through the press, of which 3.6 s was
+ANSYS; 1300 s per frame inside the transient window, of which 1298 s was ANSYS.
+The projection, rendering, saving and mesh views together are under two seconds
+a frame throughout. Nothing on the Python side is worth optimising for a slide,
+and a faster slide means a coarser transient window, a shorter stroke, or a
+different solver allocation - see [performance](performance.md).
+
+**A long slide needs `solver.result_substeps`.** Once contact points start
+changing state the time step bisects to a few 1e-5 s, and hundreds of substeps
+are solved between checkpoints. Recording every one of them writes a couple of
+megabytes each: a 4 mm slide was on course for well over 100 GB, and reached
+33 GB a tenth of the way through. The cylinder suites declare `each_checkpoint`,
+which records the substeps frames are written from and the acceptance rules are
+applied to - about 3 MB per checkpoint, 1.5 GB for a whole slide. Copy that
+setting into any setup with a long slide. [Convergence](convergence.md)
+
+A result file that large also used to be unreadable: MAPDL keeps each 64-bit
+file offset as two 32-bit words, and the reader read them signed while packing
+them unsigned, so it raised as soon as an offset crossed 2 GiB.
+`rst_contact.allow_large_result_files` masks them back to the unsigned values the
+format holds, which is the identity for every offset that read correctly before.
+That removes the hard failure; the file size is what `result_substeps` is
+for.
+
 ## Use your own object mesh
 
 Start from [`imported_rigid_press.json`](../configs/imported_rigid_press.json)

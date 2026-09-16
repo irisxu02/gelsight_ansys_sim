@@ -272,7 +272,11 @@ axis at 5 mm/s under the same load, and held again.
 | [custom_gel_cylinder_20mm](configs/custom_gel_cylinder_slide/cylinder_20mm.json) | Press to 4 N, hold, slide, hold | The 20 mm cylinder on the same turned tapered pad |
 
 Select a preset with `--config`. The [example guide](docs/examples/README.md)
-describes the trajectories, object materials, and export format. Each run saves
+lists what each one shows and [what it costs to run](docs/examples/README.md#choosing-one),
+and describes the trajectories, object materials, and export format.
+To work through several, queue them with
+[`run_examples.py`](docs/usage.md#run-several-examples); one solver checkout
+means starting them at once is no faster. Each run saves
 its resolved configuration, measurements, and validation results. The
 [detached high-resolution queue](docs/usage.md#detached-high-resolution-example-queue)
 exports checked examples into `docs/examples/<config_name>/`.

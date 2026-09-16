@@ -11,9 +11,9 @@
 3. [Configuration](configuration.md): select object geometry, material cases,
    parameter overrides, and surface/contact properties; includes the
    [custom-mesh interface](configuration.md#custom-object-meshes).
-4. [Examples](examples/README.md): generated contact presets,
-   [imported-object pressing](examples/README.md#imported-object-examples),
-   material comparisons, and exported animations.
+4. [Examples](examples/README.md): what every shipped example shows and
+   [what each one costs](examples/README.md#choosing-one), from a seven-minute
+   press to an overnight slide.
 
 ## Understand the model
 

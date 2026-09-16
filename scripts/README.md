@@ -12,6 +12,7 @@ stays thin and that the command behind it still answers `--help`.
 | Script | What it does |
 |---|---|
 | `run_simulation.py` | Run a configuration. The main entry point; also `--dry-run`. |
+| `run_examples.py` | Run several configurations one after another, which is what a one-checkout licence allows; reports each one's status and time. |
 | `resume_simulation.py` | Continue an interrupted run from saved states and solver restart files; plane runs also support retained checkpoints. |
 | `validate_simulation.py` | Launch licensed general-contact integration runs and check their numerical and output contracts. |
 | `validate_plane.py` | Run a plane-contact preset as a licensed validation and record whether it passed. |

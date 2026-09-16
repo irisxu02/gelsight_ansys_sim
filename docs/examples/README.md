@@ -2,6 +2,47 @@
 
 [Documentation](../README.md) · [Usage](../usage.md) · [Materials and contact](../materials-and-contact.md)
 
+Every example runs with the same command:
+
+```bash
+python scripts/run_simulation.py run --config CONFIG [--render-scale 4]
+```
+
+Add `--dry-run` to resolve and check a configuration without starting ANSYS.
+To work through several, queue them with
+[`run_examples.py`](../usage.md#run-several-examples): a licence that allows one
+solver checkout makes starting them at once no faster than one at a time.
+
+## Choosing one
+
+Times are wall clock on the machine [performance](../performance.md) describes,
+at `--render-scale 4`, and they are dominated by the solver rather than by the
+resolution asked for. A press is a coffee break; a slide is an afternoon or a
+night.
+
+| Example | Shows | Frames | Measured |
+|---|---|---|---|
+| [imported_rigid_press](../../configs/imported_rigid_press.json) | Importing your own STL surface | 6 | 2 min |
+| [imported_soft_press](../../configs/imported_soft_press.json) | Importing a deformable hex volume | 6 | 2 min |
+| [soft_sphere_press](../../configs/soft_sphere_press.json) | A deformable object sharing the travel | 13 | 5 min |
+| [sphere_press](../../configs/sphere_press.json) | The basic press and release | 13 | 7 min |
+| [custom_gel_press](../../configs/custom_gel_press.json) | A pad that narrows towards its face, and a denser marker array | 13 | 6 min |
+| [sphere_twist](../../configs/sphere_twist.json) | Torque and marker circulation | 14 | 8 min |
+| [sphere_slide](../../configs/sphere_slide.json) | Shear and marker displacement | 15 | 19 min |
+| [rough_sphere_slide](../../configs/rough_sphere_slide.json) | Higher friction on a stiffer object | 15 | 42 min |
+| [material_plane_slide](../../configs/material_plane_slide/) (7 cases) | Material comparison at equal load | 311 | hours; see below |
+| [cylinder_press_slide](../../configs/cylinder_press_slide/) (2 cases) | Curvature at a commanded 4 N, sliding 4 mm | 351 | overnight; see below |
+| [custom_gel_cylinder_slide](../../configs/custom_gel_cylinder_slide/) (2 cases) | The same pair on the tapered pad, turned a quarter | 351 | overnight; see below |
+
+The press examples are the ones to start with: they exercise the whole path -
+solve, contact extraction, projection, optics, markers, export - in minutes, and
+a failure in any of it shows up immediately. The slides add friction history and
+an inertial window, and that is where the hours are.
+
+Before committing a night to a slide, run its first frames with
+`--stop-after-s`; [running a long example](../usage.md#run-a-long-example)
+explains that and the two settings a long slide needs.
+
 ## Presets
 
 These JSON configurations define the current example inputs. Materials and
@@ -90,6 +131,60 @@ cases also need the native adapter libraries. See
 
 Parameter values, physical meanings, expected signatures, and limitations are
 in [Plane material specifications](../materials-and-contact.md#plane-material-specifications).
+
+## Cylinder press-and-slide examples
+
+[`configs/cylinder_press_slide/`](../../configs/cylinder_press_slide/) presses a
+rigid cylinder onto the nominal sensor under a commanded 4 N, holds it, slides it
+4 mm along its own axis at 5 mm/s with the load maintained, and holds again.
+
+| Case config | Cylinder |
+|---|---|
+| [100 mm](../../configs/cylinder_press_slide/cylinder_100mm.json) | 100 mm diameter x 50 mm, axis along y |
+| [20 mm](../../configs/cylinder_press_slide/cylinder_20mm.json) | 20 mm diameter x 50 mm, axis along y |
+
+Both are pressed to the same load rather than the same travel, so what separates
+them is curvature alone: the wide cylinder spreads 4 N over most of the imaged
+region while the narrow one concentrates it in a band a few millimetres across.
+The travel each needs is a result to read, not a setting - about 0.34 mm for the
+100 mm cylinder at 4 N on the nominal pad.
+
+The slide runs along the cylinder's own axis, so the contact geometry does not
+change during it and what the record holds is the frictional transition. Measured
+on the 100 mm case: the apparent friction ratio climbs from zero through 0.20 at
+0.4 mm of slide to 0.40 at 1.1 mm, against a declared static coefficient of 0.6,
+with the fraction of sliding contact points rising from a handful to a third. The
+stroke is 4 mm because a 2 mm one ends before that transition completes.
+
+[Cylinder geometry and the patch cut from it](../configuration.md#cylinders) ·
+[what a band contact is judged on](../convergence.md#a-target-that-is-not-meant-to-cover-the-sensor)
+
+## Custom gel pad examples
+
+These use a pad that narrows towards the face it senses with: a 25.25 x 20.75 mm
+backing, 3 mm of straight wall, then 2 mm tapering to a 22 x 16 mm sensing face
+carrying an 11 x 17 array of 0.5 mm markers, against the nominal 7 x 9 array of
+63. The pad is 5 mm thick where the nominal one is 4 mm, so it is softer, and its
+sensing face is smaller, so the camera sees more of it.
+
+| Example | Object | Frames |
+|---|---|---|
+| [custom_gel_press](../../configs/custom_gel_press.json) | Rigid 3 mm sphere, press and release | 13 |
+| [custom_gel_cylinder_slide/100 mm](../../configs/custom_gel_cylinder_slide/cylinder_100mm.json) | 100 mm cylinder at 4 N, sliding 4 mm along x | 351 |
+| [custom_gel_cylinder_slide/20 mm](../../configs/custom_gel_cylinder_slide/cylinder_20mm.json) | 20 mm cylinder, the same | 351 |
+
+The press is the one to run first: thirteen frames say whether the pad builds,
+converges and renders before a slide is committed to it. Measured on it - 0.469 N
+at 1 mm of travel, loading and unloading within 0.3% of each other, no residual
+force after release.
+
+The cylinder cases mount the sensor a quarter turn from the nominal suite, so the
+cylinder lies along x and slides along x. On a face that is 22 mm one way and
+16 mm the other that is not a relabelling: the contact line runs the wide side
+instead of the narrow one, and the same 4 N is carried by a longer line.
+
+[Pad geometry and its marker array](../sensor-alignment.md#a-pad-that-narrows-towards-its-sensing-face) ·
+[declaring one](../configuration.md#custom-gel-pads)
 
 ### Rigid plane, 1 mm slide at 5 N
 
