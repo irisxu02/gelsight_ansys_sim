@@ -968,3 +968,48 @@ class DocumentationIsNotPhysicsTests(unittest.TestCase):
             changed = changed.with_plane_sampling()
             with self.assertRaisesRegex(ValueError, "mechanical setup"):
                 validate_plane_resume(root, changed)
+
+
+def reader_available():
+    try:
+        import ansys.mapdl.reader  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+class LargeResultFileTests(unittest.TestCase):
+    """A transient slide writes every substep; its pointers outgrow 2 GiB."""
+
+    def test_offsets_past_two_gibibytes_are_read_as_unsigned(self):
+        import struct
+
+        from gelsight_ansys.rst_contact import two_ints_to_long
+
+        def reader_arithmetic(low, high):
+            """What the reader does today: pack both words as unsigned."""
+            return struct.unpack(
+                ">q", struct.pack(">I", high) + struct.pack(">I", low)
+            )[0]
+
+        # A low word past 2 GiB arrives signed, and the reader's pack raises.
+        with self.assertRaises(struct.error):
+            reader_arithmetic(-2147483648, 0)
+        self.assertEqual(two_ints_to_long(-2147483648, 0), 2**31)
+        self.assertEqual(two_ints_to_long(-1, 7), 7 * 2**32 + 2**32 - 1)
+        # Everything that reads correctly today is left exactly as it was.
+        for low, high in ((0, 0), (1, 0), (2**31 - 1, 0), (12345, 3)):
+            self.assertEqual(two_ints_to_long(low, high), reader_arithmetic(low, high))
+
+    @unittest.skipUnless(reader_available(), "Requires the ANSYS result reader")
+    def test_the_reader_is_actually_given_the_replacement(self):
+        from ansys.mapdl.reader import common
+
+        from gelsight_ansys.rst_contact import allow_large_result_files, two_ints_to_long
+
+        original = common.two_ints_to_long
+        try:
+            allow_large_result_files()
+            self.assertIs(common.two_ints_to_long, two_ints_to_long)
+        finally:
+            common.two_ints_to_long = original
