@@ -335,7 +335,7 @@
     }
   },
   "contact_acceptance": {
-    "scope": "all_recorded_frames_and_converged_substeps",
+    "scope": "all_recorded_frames_and_solved_checkpoints",
     "definition": "continuous_contact_band_under_the_cylinder",
     "sensor_region": "camera_field_of_view_for_bin_activity; loaded_sensor_nodes_for_geometry_and_edge_margin; whole_outer_sensor_surface_for_total_force",
     "edge_margin_scope": "loaded_sensor_nodes",
@@ -431,7 +431,8 @@
     "nonlinear_diagnostics": false,
     "transient_points_per_cycle": 13,
     "predict_cutback": true,
-    "note": "Large deflection (NLGEOM) is always on. The analysis is quasi-static except inside protocol.transient windows, which integrate mass. GPU acceleration is requested and verified by the run; a formulation the GPU cannot solve stops the run rather than silently changing the model. transient_points_per_cycle and predict_cutback are CUTCONTROL settings. 13 points per response cycle is measured, not assumed: at the inertia window's onset the rigid reference held a 8.5e-5 s increment and converged every substep in one iteration with it, and without it ANSYS predicted a larger increment, failed to converge, bisected to 2.3e-5 s and spent four iterations a substep. Leaving the key null sends no command and takes whatever ANSYS would choose. The 150-iteration ceiling leaves headroom for contact status changes; it used to be imposed silently on top of a declared 80, so a resolved run disagreed with the setup it came from. cores, gpu, require_gpu and allow_unlisted_gpu say where a run executes and are the only solver settings a resolved run may hold differently from this block."
+    "note": "Large deflection (NLGEOM) is always on. The analysis is quasi-static except inside protocol.transient windows, which integrate mass. GPU acceleration is requested and verified by the run; a formulation the GPU cannot solve stops the run rather than silently changing the model. transient_points_per_cycle and predict_cutback are CUTCONTROL settings. 13 points per response cycle is measured, not assumed: at the inertia window's onset the rigid reference held a 8.5e-5 s increment and converged every substep in one iteration with it, and without it ANSYS predicted a larger increment, failed to converge, bisected to 2.3e-5 s and spent four iterations a substep. Leaving the key null sends no command and takes whatever ANSYS would choose. The 150-iteration ceiling leaves headroom for contact status changes; it used to be imposed silently on top of a declared 80, so a resolved run disagreed with the setup it came from. cores, gpu, require_gpu and allow_unlisted_gpu say where a run executes and are the only solver settings a resolved run may hold differently from this block. result_substeps records the last substep of each load step rather than the whole nonlinear path. Once the slide bisects to a few 1e-5 s there are hundreds of substeps between checkpoints, each writing about 2.8 MB of nodal solution and contact records: the 100 mm cylinder's file reached 33 GB a tenth of the way through its slide and was on course for well over a hundred. Reading a file that large is a separate matter, and a fixed one: see rst_contact.allow_large_result_files. Checkpoints are what frames are written from and what the acceptance rules are applied to, so this costs the intermediate path rather than any recorded state.",
+    "result_substeps": "each_checkpoint"
   },
   "dataset": {
     "sample_interval_s": 0.01,

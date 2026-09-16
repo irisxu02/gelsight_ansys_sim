@@ -148,6 +148,22 @@ class CylinderTargetTests(unittest.TestCase):
         # Travel is an outcome here; nothing prescribes it after the handover.
         self.assertEqual(press.depth_m, 0.0)
 
+    def test_the_cylinder_suites_record_checkpoints_rather_than_every_substep(self):
+        """A slide bisects to a few 1e-5 s; the whole path will not fit in a file."""
+        for name in CASES:
+            with self.subTest(name):
+                config = load(name)
+                self.assertEqual(config.solver.result_substeps, "each_checkpoint")
+                self.assertEqual(
+                    config.specification.suite["contact_acceptance"]["scope"],
+                    "all_recorded_frames_and_solved_checkpoints",
+                )
+        # The slab suites are unchanged, and an unknown value is refused.
+        slab = Config.load(ROOT / "configs/material_plane_slide/rigid_reference.json")
+        self.assertEqual(slab.solver.result_substeps, "every_substep")
+        with self.assertRaisesRegex(ValueError, "result_substeps"):
+            load("cylinder_20mm").with_solver(result_substeps="sometimes")
+
     def test_a_protocol_that_slides_along_both_axes_is_refused(self):
         case = load("cylinder_20mm").specification
         diagonal = PlaneCase(case.suite, case.case)

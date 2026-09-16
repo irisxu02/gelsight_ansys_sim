@@ -309,10 +309,10 @@ class AnsysPlane(AnsysSession):
             "CM,GS_CONTACT,ELEM",
             "ALLSEL,ALL",
             "OUTRES,ALL,NONE",
-            "OUTRES,NSOL,ALL",
-            "OUTRES,RSOL,ALL",
-            "OUTRES,NLOAD,ALL,GS_CONTACT",
-            "OUTRES,MISC,ALL,GS_CONTACT",
+            f"OUTRES,NSOL,{self.result_frequency}",
+            f"OUTRES,RSOL,{self.result_frequency}",
+            f"OUTRES,NLOAD,{self.result_frequency},GS_CONTACT",
+            f"OUTRES,MISC,{self.result_frequency},GS_CONTACT",
             "KBC,0",
             "FINISH",
         ]
@@ -320,6 +320,15 @@ class AnsysPlane(AnsysSession):
             cmds.insert(-1, "USRCAL,USEROU")
         cmds.insert(-1, "PLANE_NMISC=ETYIQR(2,-110)")
         return cmds
+
+    @property
+    def result_frequency(self):
+        """OUTRES frequency for everything this run records."""
+        return (
+            "ALL"
+            if self.config.solver.result_substeps == "every_substep"
+            else "LAST"
+        )
 
     def restore_model(self):
         from .contracts import SurfaceState
@@ -509,7 +518,9 @@ class AnsysPlane(AnsysSession):
         last_substep = int(a.get_value("ACTIVE", 0, "SET", "SBST"))
         self.last_timings = {"solve_command_s": time.perf_counter() - start}
         stats = gpu_statistics(self.directory)
-        yield from self.converged_states(self.frame_number, 1, last_substep, stats)
+        # Only substeps the result file holds can be read back and checked.
+        first = 1 if self.result_frequency == "ALL" else last_substep
+        yield from self.converged_states(self.frame_number, first, last_substep, stats)
         self.previous_solver_time = solver_time
 
     def converged_states(self, load_step, first, last, stats):

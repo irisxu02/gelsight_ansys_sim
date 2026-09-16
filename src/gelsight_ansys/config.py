@@ -163,6 +163,14 @@ class Solver:
     # Cut back on a predicted iteration count (CUTCONTROL,NOITERPREDICT) rather
     # than on an actual failure to converge. ANSYS predicts by default.
     predict_cutback: bool = True
+    # Which converged substeps reach the result file, and so which ones can be
+    # checked and rendered. "every_substep" records the whole nonlinear path;
+    # "each_checkpoint" records the last substep of each load step, which is the
+    # instant a frame is written from. A slide that bisects to a few 1e-5 s
+    # solves hundreds of substeps between checkpoints and writes a couple of
+    # megabytes for each, so the choice decides whether the file stays in the
+    # tens of megabytes or reaches the hundreds of gigabytes.
+    result_substeps: str = "every_substep"
 
 
 @dataclass(frozen=True)
@@ -591,6 +599,10 @@ class Config:
         ):
             if type(value) is not int or value < 1:
                 raise ValueError("Solver counts must be positive integers")
+        if self.solver.result_substeps not in ("every_substep", "each_checkpoint"):
+            raise ValueError(
+                "solver.result_substeps must be every_substep or each_checkpoint"
+            )
         if self.solver.equation_solver not in ("sparse", "mixed"):
             raise ValueError("equation_solver must be sparse or mixed")
         if self.solver.newton_raphson not in ("full", "unsymmetric"):
