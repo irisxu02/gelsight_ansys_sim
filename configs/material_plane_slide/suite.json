@@ -397,7 +397,7 @@
     "tangential_pair_note": "FKT and SLTO are raised together, so the elastic slip the interface tolerates - their ratio - is unchanged at 2.5 um and the contact is exactly as stiff. What changes is how often augmented Lagrange revisits a converged state to update its multipliers. At FKT = 1 each revisit threw the residual up by as much as two orders of magnitude, and the slide was lost within tens of micrometres."
   },
   "solver": {
-    "version": 252,
+    "version": 261,
     "license_type": "ansys",
     "cores": 2,
     "gpu": true,

@@ -76,7 +76,7 @@
     "formulation": "displacement"
   },
   "solver": {
-    "version": 252,
+    "version": 261,
     "license_type": "ansys",
     "cores": 4,
     "gpu": false,
