@@ -425,7 +425,7 @@
     "provenance_note": "This contact table is the slab suite's, where each setting was measured against a flat 5 N contact. What carries over is the argument rather than the numbers: FKN and the tangential pair were raised to keep augmented Lagrange from revisiting converged states, which is a property of the formulation and the load level, not of the target's shape. The measured penetration and slip below are that suite's and have not been re-measured on a curved target; a band narrower than a flat footprint carries the same load at higher pressure, so expect more penetration than the figures quoted and check it in max_penetration_m."
   },
   "solver": {
-    "version": 252,
+    "version": 261,
     "license_type": "ansys",
     "cores": 2,
     "gpu": true,

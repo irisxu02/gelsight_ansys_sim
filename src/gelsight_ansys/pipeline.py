@@ -153,7 +153,10 @@ def run(
                 else:
                     summary["phase"] = "solving"
                     write_json(directory / "summary.json", summary)
-                    state, gpu = model.solve(pose)
+                    state, gpu = model.solve(pose, index)
+                    # A force-controlled pose only carries a placeholder depth;
+                    # everything downstream needs the travel the solve reached.
+                    pose = model.last_pose
                 summary["phase"] = "rendering"
                 write_json(directory / "summary.json", summary)
                 body_started = time.perf_counter()

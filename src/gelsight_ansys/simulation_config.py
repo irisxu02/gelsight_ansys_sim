@@ -168,6 +168,9 @@ def resolve_simulation(data, base_directory=None):
         "penetration_tolerance_m",
         "tangential_stiffness_factor",
         "elastic_slip_tolerance_m",
+        "stabilization_damping_normal",
+        "stabilization_damping_tangential",
+        "stabilization_damping_activation",
     }:
         raise ConfigurationError("Unknown contact numerical control")
     imported = None
