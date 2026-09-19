@@ -271,7 +271,7 @@ def main(argv=None):
                             state = (
                                 model.reference_state()
                                 if index == 0
-                                else model.solve(pose)[0]
+                                else model.solve(pose, index)[0]
                             )
                             yield state, pose
 

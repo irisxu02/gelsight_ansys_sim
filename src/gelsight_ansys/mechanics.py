@@ -1,6 +1,7 @@
 """Sphere and flat-target finite-strain mechanics and result extraction."""
 
 import time
+from dataclasses import replace
 
 import numpy as np
 
@@ -13,6 +14,13 @@ from .ansys.solution import (
 )
 from .contracts import SurfaceState
 from .mesh import sphere_mesh, structured_mesh
+from .plane_mechanics import contact_damping_commands
+
+# A load-controlled slide's stick-slip release has nowhere to go in a single
+# quasi-static Newton step: the freed elastic energy tears an element instead
+# of settling. TINTP's amplitude decay is the only damping added around it -
+# this gel carries no Prony branches, so no Rayleigh terms go on top.
+TRANSIENT_NUMERICAL_DAMPING = 0.05
 
 
 class AnsysGel(AnsysSession):
@@ -56,11 +64,20 @@ class AnsysGel(AnsysSession):
                 f"EN,{first_element},"
                 + ",".join(str(self.pilot + i + 1) for i in range(4)),
             ]
-        commands += [
-            "TSHAP,PILO",
-            f"EN,{first_element + 1},{self.pilot}",
-            f"D,{self.pilot},ALL,0",
-        ]
+        commands += ["TSHAP,PILO", f"EN,{first_element + 1},{self.pilot}"]
+        if self.load_controlled:
+            # Every other pilot DOF stays prescribed; UZ is left free here and
+            # driven by D or F per solved step, whichever that step commands.
+            commands += [
+                f"D,{self.pilot},UX,0",
+                f"D,{self.pilot},UY,0",
+                f"D,{self.pilot},ROTX,0",
+                f"D,{self.pilot},ROTY,0",
+                f"D,{self.pilot},ROTZ,0",
+            ]
+            self.load_node = self.pilot
+        else:
+            commands.append(f"D,{self.pilot},ALL,0")
         return commands
 
     def build(self):
@@ -69,6 +86,11 @@ class AnsysGel(AnsysSession):
         nsolid, nface = self.contact_start, len(mesh.surface_quads)
         self.pilot = len(mesh.coordinates) + 1
         self.initial_pilot = self.reference_point()
+        # Load control changes which pilot DOFs exist, so it is fixed for the
+        # life of the model rather than decided per solved step.
+        self.load_controlled = any(p.force_controlled for p in c.trajectory)
+        self.load_node = None
+        self.previous_pose = None
         commands = [
             "/PREP7",
             "ET,1,SOLID185",
@@ -101,6 +123,7 @@ class AnsysGel(AnsysSession):
         ]
         if ind.elastic_slip_tolerance_m is not None:
             commands.append(f"RMODIF,1,23,{-ind.elastic_slip_tolerance_m:.16g}")
+        commands += contact_damping_commands(ind, 2)
         for i, quad in enumerate(mesh.surface_quads):
             commands.append(
                 f"EN,{nsolid + i + 1},"
@@ -146,7 +169,7 @@ class AnsysGel(AnsysSession):
             "ALLSEL,ALL",
             "FINISH",
             "/SOLU",
-            "ANTYPE,STATIC",
+            "ANTYPE,TRANS" if self.load_controlled else "ANTYPE,STATIC",
             "NLGEOM,ON",
             equation_solver_command(c.solver),
             *solution_control_commands(c.solver),
@@ -193,7 +216,29 @@ class AnsysGel(AnsysSession):
         geometry.update(self.additional_geometry())
         np.savez_compressed(self.directory.parent / "solid_mesh.npz", **geometry)
 
-    def solve(self, pose):
+    def needs_inertia(self, index):
+        """Whether solving trajectory[index] should carry mass and damping.
+
+        Derived from the schedule itself rather than a declared window: a
+        force-controlled step whose lateral position differs from its
+        neighbor, on either side, is sliding or about to. Inertia switches on
+        one hold step before the slide starts, matching the lead-in the plane
+        adapter uses, and switches off again once the position stops moving.
+        """
+        poses = self.config.trajectory
+        pose = poses[index]
+        if not pose.force_controlled:
+            return False
+        here = (pose.x_m, pose.y_m)
+        before = (poses[index - 1].x_m, poses[index - 1].y_m) if index > 0 else here
+        after = (
+            (poses[index + 1].x_m, poses[index + 1].y_m)
+            if index + 1 < len(poses)
+            else here
+        )
+        return here != before or here != after
+
+    def solve(self, pose, index=None):
         c, mapdl = self.config, self.mapdl
         self.frame_number += 1
         commands = ["FINISH", "/SOLU"]
@@ -210,18 +255,59 @@ class AnsysGel(AnsysSession):
             f"TIME,{pose.time_s:.16g}",
             f"NSUBST,{c.solver.initial_substeps},{c.solver.maximum_substeps},1",
         ]
+        if self.load_controlled:
+            inertia = index is not None and self.needs_inertia(index)
+            commands.append("TIMINT,ON" if inertia else "TIMINT,OFF")
+            if inertia:
+                commands.append(f"TINTP,{TRANSIENT_NUMERICAL_DAMPING:.16g}")
+                # NSUBST's substep count was sized for a quasi-static ramp; a
+                # stick-slip release plays out in milliseconds, so the mass
+                # matrix needs an initial and minimum step tiny by comparison
+                # or the transient integration has nothing to resolve.
+                previous_time = (
+                    self.previous_pose.time_s if self.previous_pose is not None else 0.0
+                )
+                duration = pose.time_s - previous_time
+                commands.append(
+                    f"DELTIM,{duration / 500:.16g},{duration / 5000:.16g},"
+                    f"{duration / 20:.16g}"
+                )
         node = "ALL" if c.indenter.deformable else str(self.pilot)
         if c.indenter.deformable:
             commands += ["CMSEL,S,GRIP"]
         commands += [
             f"D,{node},UX,{pose.x_m:.16g}",
             f"D,{node},UY,{pose.y_m:.16g}",
-            f"D,{node},UZ,{-pose.depth_m - c.indenter.clearance_m:.16g}",
         ]
+        if pose.force_controlled:
+            # A stale D constraint from the previous step would otherwise keep
+            # pinning the platen, and the commanded load would just show up as
+            # its reaction instead of moving the pilot.
+            commands += [
+                f"DDELE,{self.load_node},UZ",
+                f"F,{self.load_node},FZ,{-pose.normal_force_n:.16g}",
+            ]
+        else:
+            travel = -pose.depth_m - c.indenter.clearance_m
+            if self.load_controlled:
+                commands += [
+                    f"FDELE,{self.load_node},FZ",
+                    f"D,{self.load_node},UZ,{travel:.16g}",
+                ]
+            else:
+                commands.append(f"D,{node},UZ,{travel:.16g}")
         if c.indenter.deformable:
             commands += ["ALLSEL,ALL"]
         else:
             commands += [f"D,{node},ROTZ,{pose.twist_rad:.16g}"]
+        # A ramped load or displacement picks up from the previous step's
+        # value; the DOF just switched what drives it, on either side, so
+        # there is no previous value of the new kind to ramp from. Step it on
+        # instead, whichever direction the handover runs.
+        mode_changed = self.previous_pose is not None and (
+            pose.force_controlled != self.previous_pose.force_controlled
+        )
+        commands.append("KBC,1" if mode_changed else "KBC,0")
         commands += [
             "NCNV,2",
             "GS_CNV=-1",
@@ -255,6 +341,14 @@ class AnsysGel(AnsysSession):
             self.frame_number,
         )
         timings["solve_validation_s"] = time.perf_counter() - started
+        if pose.force_controlled:
+            # Travel is the outcome of a commanded load, so read back what the
+            # pilot actually reached before anything downstream consumes it.
+            achieved = (
+                -mapdl.get_value("NODE", self.pilot, "U", "Z")
+                - c.indenter.clearance_m
+            )
+            pose = replace(pose, depth_m=achieved)
         started = time.perf_counter()
         state = self.extract(pose)
         timings["extraction_s"] = time.perf_counter() - started
@@ -269,6 +363,8 @@ class AnsysGel(AnsysSession):
                 )
         timings["solver_evidence_s"] = time.perf_counter() - started
         self.last_timings = timings
+        self.last_pose = pose
+        self.previous_pose = pose
         return state, stats
 
     def extract(self, pose):
@@ -360,6 +456,11 @@ class AnsysGel(AnsysSession):
             moments = np.array(
                 [a.get_value("NODE", self.pilot, "RF", dof) for dof in ("MX", "MY", "MZ")]
             )
+            if pose.force_controlled:
+                # Under load control UZ is a loaded, not a constrained, pilot
+                # DOF, so it reports no reaction there; the commanded load
+                # takes its place, matching what was actually applied.
+                reaction = np.array([reaction[0], reaction[1], -pose.normal_force_n])
         reference = self.reference_surface()
         surface_displacement = displacement[m.surface_nodes].copy()
         contact_couple = np.zeros_like(contact_force)
