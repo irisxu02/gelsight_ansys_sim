@@ -126,8 +126,8 @@
         1.0
       ]
     ],
-    "marker_spacing_m": 0.0010862,
-    "marker_radius_m": 0.00025,
+    "marker_spacing_m": 0.00085,
+    "marker_radius_m": 0.0002,
     "marker_opacity": 0.45,
     "background_image": "../assets/sensors/gelsight_custom_11x17/background.png",
     "animation_fps": 5,
@@ -137,8 +137,12 @@
       17
     ],
     "marker_margin_px": [
-      10.0,
-      10.0
+      46.3,
+      42.9
+    ],
+    "marker_offset_px": [
+      5.2,
+      4.5
     ],
     "marker_radius_px": null,
     "model": "taxim",

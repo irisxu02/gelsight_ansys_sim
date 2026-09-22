@@ -67,10 +67,12 @@ See [sensor alignment](../sensor-alignment.md) for FOV and marker conventions.
 worked example, not a curated dataset preset (`"status":
 "capability_example"`; preset discovery and export leave it alone, so it
 carries no measured solve time here). It runs the same sphere-press
-trajectory as `sphere_press` on the unchanged nominal gel, but swaps in the
-denser 11 × 17 marker grid and a background image extracted from a second,
-supplied example sensor's raw capture instead of the stock Mini background.
-See [sensor alignment](../sensor-alignment.md#a-second-example-sensors-captured-background)
+trajectory as `sphere_press` on the unchanged nominal gel and the stock Mini
+background, but swaps in a denser 11 × 17 marker grid placed where a second,
+supplied example sensor's raw capture shows its dots.
+[`hemisphere_slide_11x17`](../../configs/hemisphere_slide_11x17.json) slides
+the large hemisphere under the same sensor at 0.5 N.
+See [sensor alignment](../sensor-alignment.md#a-second-example-sensors-marker-grid)
 for what was and was not derived from that capture.
 
 ## Trajectory conventions
