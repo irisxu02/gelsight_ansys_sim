@@ -77,6 +77,30 @@ class CameraTests(unittest.TestCase):
             image_coordinates(markers.reference_m, camera), pixels, atol=1e-13
         )
 
+    def test_marker_offset_shifts_the_lattice_and_scales_with_resolution(self):
+        base = Config()
+        optics = replace(
+            base.optics, marker_grid_rows_cols=(11, 17), marker_margin_px=(46.3, 42.9)
+        )
+        centered = reference_marker_pixels(base.camera, optics)
+        moved = replace(optics, marker_offset_px=(5.2, 4.5))
+        np.testing.assert_allclose(
+            reference_marker_pixels(base.camera, moved) - centered,
+            np.tile([4.5, 5.2], (len(centered), 1)),
+        )
+        config = replace(base, optics=moved).validate()
+        scaled = config.with_render_scale(4)
+        self.assertEqual(scaled.optics.marker_offset_px, (20.8, 18.0))
+        np.testing.assert_allclose(
+            pixels_to_reference(
+                reference_marker_pixels(scaled.camera, scaled.optics), scaled.camera
+            ),
+            pixels_to_reference(reference_marker_pixels(base.camera, moved), base.camera),
+            atol=1e-12,
+        )
+        with self.assertRaisesRegex(ValueError, "Offset marker lattice"):
+            replace(base, optics=replace(moved, marker_offset_px=(0.0, 43.0))).validate()
+
     def render_stretch(self, backend, stretch):
         state = flat_state()
         base = Config()

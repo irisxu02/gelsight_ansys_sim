@@ -209,6 +209,9 @@ class Optics:
     marker_style: str = "gaussian"
     marker_grid_rows_cols: tuple[int, int] | None = None
     marker_margin_px: tuple[float, float] = (24.0, 24.0)
+    # Shifts the whole lattice (rows, cols) in pixels, +y down the image, for
+    # a captured grid that does not sit on the image center.
+    marker_offset_px: tuple[float, float] = (0.0, 0.0)
     marker_radius_px: float | None = None
     background_image: str | None = None
     animation_fps: int = 5
@@ -432,6 +435,7 @@ class Config:
                 marker_margin_px=tuple(
                     (v + 0.5) * scale - 0.5 for v in self.optics.marker_margin_px
                 ),
+                marker_offset_px=tuple(v * scale for v in self.optics.marker_offset_px),
                 marker_radius_px=self.optics.marker_radius_px * scale
                 if self.optics.marker_radius_px is not None
                 else None,
@@ -656,6 +660,12 @@ class Config:
                 for v, n in zip(margins, (self.camera.height_px, self.camera.width_px))
             ):
                 raise ValueError("Marker margins must lie inside the image")
+            offset = self.optics.marker_offset_px
+            # Outer centers sit at margin + offset and size - 1 - margin + offset.
+            if len(offset) != 2 or any(
+                not math.isfinite(v) or abs(v) > m for v, m in zip(offset, margins)
+            ):
+                raise ValueError("Offset marker lattice must lie inside the image")
         if self.optics.model not in ("analytic", "taxim"):
             raise ValueError("optics.model must be analytic or taxim")
         if self.optics.render_mode not in ("raw", "subtracted"):

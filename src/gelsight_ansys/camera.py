@@ -14,6 +14,7 @@ from .surface import barycentric, image_coordinates
 def reference_marker_pixels(camera, optics):
     rows, cols = optics.marker_grid_rows_cols
     my, mx = optics.marker_margin_px
+    dy, dx = optics.marker_offset_px
     yy = (
         np.linspace(my, camera.height_px - 1 - my, rows)
         if rows > 1
@@ -25,7 +26,7 @@ def reference_marker_pixels(camera, optics):
         else [(camera.width_px - 1) / 2]
     )
     xx, yy = np.meshgrid(xx, yy)
-    return np.column_stack((xx.ravel(), yy.ravel()))
+    return np.column_stack((xx.ravel() + dx, yy.ravel() + dy))
 
 
 def pixels_to_reference(pixels, camera):
