@@ -93,6 +93,27 @@ The default RGB uses a measured example-sensor background and optical table,
 rotated clockwise into landscape. Their [provenance](../src/gelsight_ansys/data/mini/PROVENANCE.md)
 is retained; those assets do not calibrate an individual device.
 
+## A second example sensor's captured background
+
+[`gelsight_custom_11x17`](../configs/gelsight_custom_11x17.json) is a worked
+example (`"status": "capability_example"`), not a curated dataset preset. It
+keeps the nominal straight gel, camera, and mesh unchanged and only replaces
+the appearance inputs:
+
+| Quantity | This preset |
+|---|---|
+| Marker layout | 11 rows × 17 columns, 187 markers - the same pitch, margins, and dot size as [`custom_gel_press`](#a-pad-that-narrows-towards-its-sensing-face) |
+| Background image | `optics.background_image`, frame 0 of a supplied 406-frame raw capture (`gs.npz`), not the stock Mini background |
+| Optical response table | Still Mini's `polycalib.npz`; no device-specific photometric calibration was fitted |
+
+Only the background pixels changed; the marker pitch was not independently
+measured from the capture. Automated marker-center detection on the raw
+frames did not converge on a clean, countable grid, so this preset reuses
+`custom_gel_press`'s already-declared 11 × 17 numbers rather than a value
+newly derived from the capture. See its
+[provenance](../assets/sensors/gelsight_custom_11x17/PROVENANCE.md) for how
+the background frame was chosen and what remains uncalibrated.
+
 ## Pixel scale and projection
 
 Pixel pitch is derived from the configured field of view and image dimensions.

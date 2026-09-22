@@ -200,7 +200,7 @@ def resolve_simulation(data, base_directory=None):
     resolved = {
         key: deepcopy(value)
         for key, value in data.items()
-        if key not in ("object", "contact", "surface", "config_kind")
+        if key not in ("object", "contact", "surface", "config_kind", "status")
     }
     resolved.update(schema_version=4, indenter=indenter)
     if imported is not None:
