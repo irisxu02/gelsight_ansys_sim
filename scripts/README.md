@@ -40,6 +40,7 @@ stays thin and that the command behind it still answers `--help`.
 
 | Script | What it does |
 |---|---|
+| `gelsight_stream.py` | View and record a USB GelSight Mini, optionally beside a finished run; see [live sensor](../docs/live-sensor.md). |
 | `ansys_smoke_test.py` | Prove a licensed solver is reachable and solves. |
 | `ansys_license_probe.py` | Attempt a Windows Mechanical session license checkout and record the result; does not solve a model. |
 | `ansys_size_probe.py` | Test one requested node count using a connected spring chain; defaults to 600,000 nodes. |
@@ -67,3 +68,4 @@ stays thin and that the command behind it still answers `--help`.
 | `validate_plane_adapters.py`, `validate_plane_contact.py` | `gelsight_ansys.diagnostics.*_coupons` |
 | `parse_solver_monitor.py`, `parse_contact_tracking.py`, `contact_health.py` | `gelsight_ansys.diagnostics.*_report`, `contact_health` |
 | `build_plane_adapters.py` | `gelsight_ansys.native_build` |
+| `gelsight_stream.py` | `gelsight_ansys.sensor.stream` |

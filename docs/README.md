@@ -22,6 +22,7 @@
 | [Modeling](modeling.md) | Constitutive laws, geometry, boundary conditions, optics, and limitations |
 | [Materials and contact](materials-and-contact.md) | Uniform gel, coating simplification, friction, and plane material specifications |
 | [Sensor alignment](sensor-alignment.md) | Nominal camera, FOV, marker texture, and calibration requirements |
+| [Live sensor](live-sensor.md) | Viewing and recording a USB GelSight Mini in the simulator's image convention |
 
 ## Use the data and code
 
