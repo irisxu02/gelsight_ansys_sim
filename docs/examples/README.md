@@ -61,6 +61,18 @@ Add `--refine-contact` to a `run` command to enable the optional local contact
 mesh shown in the [loading preview](../rendering/README.md).
 See [sensor alignment](../sensor-alignment.md) for FOV and marker conventions.
 
+### A second example sensor
+
+[`gelsight_custom_11x17`](../../configs/gelsight_custom_11x17.json) is a
+worked example, not a curated dataset preset (`"status":
+"capability_example"`; preset discovery and export leave it alone, so it
+carries no measured solve time here). It runs the same sphere-press
+trajectory as `sphere_press` on the unchanged nominal gel, but swaps in the
+denser 11 × 17 marker grid and a background image extracted from a second,
+supplied example sensor's raw capture instead of the stock Mini background.
+See [sensor alignment](../sensor-alignment.md#a-second-example-sensors-captured-background)
+for what was and was not derived from that capture.
+
 ## Trajectory conventions
 
 Depth is commanded indenter or grip travel from nominal first touch. A deformable
