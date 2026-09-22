@@ -5,22 +5,26 @@ advertised at 25 fps. The tested unit delivers about 18.7 fps even when frames
 are grabbed without decoding, so recordings keep a timestamp per frame rather
 than assuming a rate.
 
-Frames are decoded straight from the camera's JPEG with libjpeg's DCT scaling
-(1/2, 1/4 or 1/8 size), cropped, and area-resized to the simulator's 320 x 240
-landscape image. The crop is in raw-sensor pixels, so it means the same thing
-whatever reduction the decoder used. Everything this module hands back is RGB,
-the channel order of the simulator's ``images/frame_XXXX.png``.
+By default a frame becomes an image exactly as the real-world data collection
+makes one: ``gs_sdk.gs_device.FastCamera``, run by slip-perception's
+``run_trials.sh``, decodes the full frame to BGR, applies ``resize_crop`` (a
+1/25 border off each side, trimmed to 4:3) and ``cv2.resize``s it bilinearly to
+320 x 240. The same pixels and the same BGR channel order therefore describe
+the same marker positions in a recording made here and in a trial's
+``gs.npz``, and recordings are saved in that file's format.
 
 OpenCV is an optional dependency (``pip install -e .[sensor]``) and is imported
 only where a frame is decoded or the camera is opened.
 """
 
 import json
+import queue
 import re
 import shutil
 import subprocess
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,7 +33,7 @@ import numpy as np
 
 RAW_SIZE = (3280, 2464)
 OUTPUT_SIZE = (320, 240)
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def _cv2():
@@ -68,45 +72,57 @@ def parse_size(text):
     return int(match[1]), int(match[2])
 
 
+# Border fraction removed from each side by each SDK's resize_crop.
+SDK_BORDERS = {"gs_sdk": 1 / 25, "gsrobotics": 1 / 7}
+
+
+def sdk_crop_box(raw_size, output_size, fraction):
+    """The box a GelSight SDK ``resize_crop`` keeps, line for line.
+
+    A ``fraction`` border comes off each side (the row border from the height,
+    the column border from the width), then rows or columns come off the start
+    to reach the output aspect ratio.
+    """
+    width, height = raw_size
+    imgw, imgh = output_size
+    border_size_x, border_size_y = int(height * fraction), int(np.floor(width * fraction))
+    cropped_imgh = height - 2 * border_size_x
+    cropped_imgw = width - 2 * border_size_y
+    extra_border_h = extra_border_w = 0
+    if cropped_imgh * imgw / imgh > cropped_imgw + 1e-8:
+        extra_border_h = int(cropped_imgh - cropped_imgw * imgh / imgw)
+    elif cropped_imgh * imgw / imgh < cropped_imgw - 1e-8:
+        extra_border_w = int(cropped_imgw - cropped_imgh * imgw / imgh)
+    return (
+        border_size_y + extra_border_w,
+        border_size_x + extra_border_h,
+        width - border_size_y,
+        height - border_size_x,
+    )
+
+
 def crop_box(spec, raw_size=RAW_SIZE, output_size=OUTPUT_SIZE):
     """The raw-pixel box ``(x0, y0, x1, y1)`` a crop specification selects.
 
-    ``full`` keeps the whole sensor, which is how ``gs.npz`` was captured.
-    ``gsrobotics`` reproduces the GelSight SDK's ``resize_crop_mini``: a 1/7
-    border off each side, then more off one axis to reach the output aspect.
-    Otherwise ``spec`` is ``"x0,y0,x1,y1"`` in raw pixels.
+    ``gs_sdk`` is the crop of slip-perception's ``gs_sdk`` fork, which its
+    data collection uses: a 1/25 border. ``gsrobotics`` is the upstream SDK's and
+    ``gs-marker-utils/stream_gelsight_utils.py``'s: a 1/7 border. ``full`` keeps
+    the whole sensor. Otherwise ``spec`` is ``"x0,y0,x1,y1"`` in raw pixels.
     """
     width, height = raw_size
-    out_w, out_h = output_size
+    if spec in SDK_BORDERS:
+        return sdk_crop_box(raw_size, output_size, SDK_BORDERS[spec])
     if spec == "full":
         return 0, 0, width, height
-    if spec == "gsrobotics":
-        border_y, border_x = int(height / 7), int(np.floor(width / 7))
-        cropped_h, cropped_w = height - 2 * border_y, width - 2 * border_x
-        extra_h = extra_w = 0
-        if cropped_h * out_w / out_h > cropped_w + 1e-8:
-            extra_h = int(cropped_h - cropped_w * out_h / out_w)
-        elif cropped_h * out_w / out_h < cropped_w - 1e-8:
-            extra_w = int(cropped_w - cropped_h * out_w / out_h)
-        return border_x + extra_w, border_y + extra_h, width - border_x, height - border_y
     try:
         x0, y0, x1, y1 = (int(v) for v in spec.split(","))
     except ValueError:
         raise ValueError(
-            f"crop must be full, gsrobotics or x0,y0,x1,y1; got {spec!r}"
+            f"crop must be gs_sdk, gsrobotics, full, x0,y0,x1,y1 or grid:RxC; got {spec!r}"
         ) from None
     if not (0 <= x0 < x1 <= width and 0 <= y0 < y1 <= height):
         raise ValueError(f"crop {spec!r} lies outside the {width}x{height} sensor")
     return x0, y0, x1, y1
-
-
-def decode_reduction(box, output_size=OUTPUT_SIZE):
-    """The largest JPEG DCT reduction that still leaves the crop at least output size."""
-    box_w, box_h = box[2] - box[0], box[3] - box[1]
-    for reduction in (8, 4, 2):
-        if box_w / reduction >= output_size[0] and box_h / reduction >= output_size[1]:
-            return reduction
-    return 1
 
 
 def parse_grid(spec):
@@ -192,14 +208,18 @@ def order_grid(points, rows, cols):
 
 @dataclass(frozen=True)
 class Framing:
-    """How a raw sensor frame becomes an output image.
+    """How a raw sensor frame becomes an output BGR image.
 
-    Either an axis-aligned crop and area resize, or a marker-lattice remap: the
-    detected unloaded marker centers are interpolated (bicubic, extrapolated
+    A crop is applied to the full-resolution frame and ``cv2.resize``d with its
+    default bilinear interpolation, as the SDK's ``resize_crop`` does, so the
+    output is the data collection's pixel for pixel.
+
+    The marker-lattice remap instead maps into the *simulator's* pixel space:
+    the detected unloaded marker centers are interpolated (bicubic, extrapolated
     linearly past the outer markers) into a raw position for every output pixel,
-    so each unloaded marker lands exactly where the simulator draws it and the
-    lens distortion goes with it. A single homography fitted to the same markers
-    is kept only to report how far the optics are from a pinhole view.
+    so each unloaded marker lands where a sim preset draws it. It is not the
+    data collection's pixel space. A single homography fitted to the same
+    markers is kept only to report how far the optics are from a pinhole view.
     """
 
     raw_size: tuple
@@ -243,7 +263,7 @@ class Framing:
     @property
     def reduction(self):
         if self.lattice is None:
-            return decode_reduction(self.box, self.output_size)
+            return 1  # resize_crop works on the full frame
         # Decode no finer than about one decoded pixel per output pixel, so the
         # bilinear remap samples without aliasing.
         raw_pitch = min(
@@ -290,22 +310,21 @@ class Framing:
         return self._maps[decoded_shape]
 
     def apply(self, bgr):
-        """RGB output image from a BGR frame decoded at any reduction of ``raw_size``."""
+        """BGR output image from a BGR frame decoded at ``raw_size`` / ``reduction``."""
         if self.lattice is None:
             return process_image(bgr, self.box, self.raw_size, self.output_size)
         cv2 = _cv2()
         map_x, map_y = self._decoded_maps(bgr.shape[:2])
-        warped = cv2.remap(
+        return cv2.remap(
             bgr, map_x, map_y, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE
         )
-        return cv2.cvtColor(warped, cv2.COLOR_BGR2RGB)
 
     def metadata(self):
         if self.lattice is None:
             return {
                 "framing": "crop",
                 "crop_box_xyxy_raw_px": list(self.box),
-                "resize": "cv2.INTER_AREA",
+                "resize": "full-resolution decode, cv2.resize INTER_LINEAR (resize_crop)",
             }
         return {
             "framing": "marker_lattice_remap",
@@ -316,14 +335,16 @@ class Framing:
 
 
 def process_image(bgr, box, raw_size=RAW_SIZE, output_size=OUTPUT_SIZE):
-    """Crop a decoded BGR frame (at any reduction of ``raw_size``) and resize to RGB."""
+    """Crop a decoded BGR frame and resize it as ``resize_crop`` does; stays BGR.
+
+    ``box`` is in raw pixels and is scaled if ``bgr`` was decoded at a reduction,
+    but only a full-resolution frame reproduces the SDK's pixels exactly.
+    """
     cv2 = _cv2()
     sx, sy = bgr.shape[1] / raw_size[0], bgr.shape[0] / raw_size[1]
     x0, y0 = int(round(box[0] * sx)), int(round(box[1] * sy))
     x1, y1 = int(round(box[2] * sx)), int(round(box[3] * sy))
-    cropped = bgr[y0:y1, x0:x1]
-    resized = cv2.resize(cropped, output_size, interpolation=cv2.INTER_AREA)
-    return cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+    return cv2.resize(bgr[y0:y1, x0:x1], output_size)
 
 
 def decode_jpeg(jpeg, reduction=1):
@@ -386,19 +407,21 @@ def set_controls(device, controls):
 
 @dataclass(frozen=True)
 class Frame:
-    rgb: np.ndarray  # (H, W, 3) uint8, processed
+    image: np.ndarray  # (H, W, 3) uint8 BGR, processed
     jpeg: bytes | None  # the camera's untouched MJPEG frame, when available
-    t_ns: int  # time.monotonic_ns() when the frame arrived
+    t_ns: int  # time.perf_counter_ns() when the frame arrived
     index: int  # 0-based count of frames received since the camera opened
 
 
 class Recording:
     """Frames appended from the capture thread, written out as a run directory.
 
-    ``frames.npz`` keeps the key names of the supplied ``gs.npz`` capture
-    (``frames``, ``t_ns``, ``frame_idx``), but its frames are RGB; ``meta.json``
-    states the channel order, crop and camera controls so a recording can be
-    matched to a simulation's camera and a later session's settings.
+    ``gs.npz`` has the format ``fast_stream_device.py`` saves for a trial:
+    BGR ``frames`` (N, H, W, 3), ``frame_idx`` counting the recorded frames from
+    0, and ``timestamps`` = ``t_ns`` in ``time.perf_counter_ns()``. It adds
+    ``device_frame_idx``, the camera's own frame count, whose gaps are frames
+    the capture missed. ``meta.json`` records the crop, camera controls and
+    timing, and ``reference.png`` the unloaded reference.
     """
 
     def __init__(self, root, meta, output_size, label=None, save_raw=False):
@@ -432,14 +455,14 @@ class Recording:
         return (self.t_ns[-1] - self.t_ns[0]) / 1e9 if self.count > 1 else 0.0
 
     def add(self, frame):
-        self._scratch.write(np.ascontiguousarray(frame.rgb).tobytes())
+        self._scratch.write(np.ascontiguousarray(frame.image).tobytes())
         if self.save_raw and frame.jpeg is not None:
             (self.path / "raw" / f"frame_{self.count:06d}.jpg").write_bytes(frame.jpeg)
         self.t_ns.append(frame.t_ns)
         self.frame_idx.append(frame.index)
 
-    def save_reference(self, rgb, frames_averaged):
-        write_png(self.path / "reference.png", rgb)
+    def save_reference(self, image, frames_averaged):
+        write_png(self.path / "reference.png", image)
         self.meta["reference"] = {
             "file": "reference.png",
             "frames_averaged": frames_averaged,
@@ -460,11 +483,12 @@ class Recording:
             frames = np.zeros((0, height, width, 3), np.uint8)
         t_ns = np.asarray(self.t_ns, np.int64)
         np.savez(
-            self.path / "frames.npz",
+            self.path / "gs.npz",
             frames=frames,
+            frame_idx=np.arange(self.count, dtype=np.int64),
+            timestamps=t_ns,
             t_ns=t_ns,
-            t_s=(t_ns - t_ns[0]) / 1e9 if self.count else np.zeros(0),
-            frame_idx=np.asarray(self.frame_idx, np.int64),
+            device_frame_idx=np.asarray(self.frame_idx, np.int64),
         )
         del frames
         partial.unlink()
@@ -480,37 +504,40 @@ class Recording:
         return self.path
 
 
-def write_png(path, rgb):
+def write_png(path, bgr):
     cv2 = _cv2()
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    if not cv2.imwrite(str(path), cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)):
+    if not cv2.imwrite(str(path), bgr):
         raise OSError(f"could not write {path}")
 
 
 def load_recording(path):
-    """A recording directory as ``{"frames", "t_s", "t_ns", "frame_idx", "meta", "reference"}``."""
+    """A recording directory: the ``gs.npz`` arrays (BGR frames), plus ``t_s``
+    from the first frame, ``meta`` and the BGR ``reference`` (or None)."""
     path = Path(path)
-    with np.load(path / "frames.npz", allow_pickle=False) as data:
+    with np.load(path / "gs.npz", allow_pickle=False) as data:
         loaded = {key: data[key] for key in data.files}
+    t_ns = loaded["t_ns"]
+    loaded["t_s"] = (t_ns - t_ns[0]) / 1e9 if t_ns.size else np.zeros(0)
     loaded["meta"] = json.loads((path / "meta.json").read_text())
     reference = path / "reference.png"
-    if reference.exists():
-        cv2 = _cv2()
-        loaded["reference"] = cv2.cvtColor(cv2.imread(str(reference)), cv2.COLOR_BGR2RGB)
-    else:
-        loaded["reference"] = None
+    loaded["reference"] = _cv2().imread(str(reference)) if reference.exists() else None
     return loaded
 
 
 class MiniCamera:
     """A GelSight Mini read on a background thread; the newest frame is always ready.
 
-    Frames are recorded from the capture thread itself, so a slow display never
-    drops frames from a recording.
+    One thread grabs and timestamps camera frames, a small pool decodes them at
+    full resolution, and a delivery thread hands them on in order, recording
+    them before the display sees them, so a slow display never costs a
+    recording a frame.
     """
 
-    def __init__(self, device, output_size=OUTPUT_SIZE, crop="full"):
+    decode_workers = 2
+
+    def __init__(self, device, output_size=OUTPUT_SIZE, crop="gs_sdk"):
         self.device = device
         self.output_size = output_size
         self.crop_spec = crop
@@ -519,7 +546,8 @@ class MiniCamera:
         self._latest = None
         self._recording = None
         self._running = False
-        self._thread = None
+        self._threads = []
+        self._pending = queue.Queue(maxsize=4 * self.decode_workers)
         self._capture = None
         self.error = None
 
@@ -564,7 +592,7 @@ class MiniCamera:
         except ValueError as error:
             raise SystemExit(
                 f"marker-grid framing failed: {error}. Start with nothing touching the gel,"
-                " check the grid size, or use --crop full"
+                " check the grid size, or use --crop gs_sdk"
             ) from None
 
     def _grab(self):
@@ -582,34 +610,61 @@ class MiniCamera:
             return decode_jpeg(buffer.tobytes(), reduction)
         return buffer  # the backend decoded to BGR itself
 
-    def _run(self):
+    def _fail(self, error):
+        self.error = error
+        with self._lock:
+            self._fresh.notify_all()
+
+    def _process(self, buffer):
+        return self.framing.apply(self._image(buffer, self.reduction))
+
+    def _capture_loop(self, pool):
         index = 0
         try:
             while self._running:
                 buffer = self._grab()
-                t_ns = time.monotonic_ns()
+                t_ns = time.perf_counter_ns()
                 jpeg = buffer.tobytes() if self._is_jpeg(buffer) else None
-                rgb = self.framing.apply(self._image(buffer, self.reduction))
-                frame = Frame(rgb, jpeg, t_ns, index)
+                # Blocks when decoding falls behind; the camera then drops
+                # frames, which show up as gaps in device_frame_idx.
+                self._pending.put((pool.submit(self._process, buffer), jpeg, t_ns, index))
                 index += 1
+        except Exception as error:  # surfaced to the caller through wait_frame
+            self._fail(error)
+        finally:
+            self._pending.put(None)
+
+    def _deliver_loop(self):
+        try:
+            while (item := self._pending.get()) is not None:
+                future, jpeg, t_ns, index = item
+                frame = Frame(future.result(), jpeg, t_ns, index)
                 with self._lock:
                     self._latest = frame
                     if self._recording is not None:
                         self._recording.add(frame)
                     self._fresh.notify_all()
-        except Exception as error:  # surfaced to the caller through wait_frame
-            self.error = error
-            with self._lock:
-                self._fresh.notify_all()
+        except Exception as error:
+            self._fail(error)
 
     def start(self):
         if self._capture is None:
             self.open()
         self._running = True
-        self._thread = threading.Thread(
-            target=self._run, name="gelsight-capture", daemon=True
-        )
-        self._thread.start()
+        self._pool = ThreadPoolExecutor(self.decode_workers, "gelsight-decode")
+        self._threads = [
+            threading.Thread(
+                target=self._capture_loop,
+                args=(self._pool,),
+                name="gelsight-capture",
+                daemon=True,
+            ),
+            threading.Thread(
+                target=self._deliver_loop, name="gelsight-deliver", daemon=True
+            ),
+        ]
+        for thread in self._threads:
+            thread.start()
         return self
 
     def latest(self):
@@ -633,12 +688,12 @@ class MiniCamera:
             return self._latest
 
     def average(self, count):
-        """Mean of the next ``count`` frames, as uint8 RGB (an unloaded reference)."""
+        """Mean of the next ``count`` frames, as uint8 BGR (an unloaded reference)."""
         total = np.zeros((self.output_size[1], self.output_size[0], 3), np.float64)
         frame = None
         for _ in range(count):
             frame = self.wait_frame(after=frame)
-            total += frame.rgb
+            total += frame.image
         return np.clip(np.rint(total / count), 0, 255).astype(np.uint8)
 
     def start_recording(self, recording):
@@ -665,15 +720,18 @@ class MiniCamera:
             **self.framing.metadata(),
             "output_size_wh": list(self.output_size),
             "jpeg_decode_reduction": self.reduction,
-            "channel_order": "RGB",
-            "t_ns_clock": "time.monotonic_ns() on frame arrival",
+            "channel_order": "BGR",
+            "format": "gs_sdk fast_stream_device gs.npz",
+            "t_ns_clock": "time.perf_counter_ns() when the camera frame arrived, before decoding",
             "camera_controls": read_controls(self.device),
         }
 
     def close(self):
         self._running = False
-        if self._thread is not None:
-            self._thread.join(timeout=2)
+        for thread in self._threads:
+            thread.join(timeout=2)
+        if self._threads:
+            self._pool.shutdown(wait=False, cancel_futures=True)
         path = self.stop_recording()
         if self._capture is not None:
             self._capture.release()

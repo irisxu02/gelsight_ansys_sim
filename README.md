@@ -78,8 +78,9 @@ Solver GPU acceleration is available as an explicit option.
   mesh with its element edges, contoured by contact pressure and by total
   displacement, written frame by frame while the run solves.
 - **[Live GelSight Mini capture](docs/live-sensor.md):** view and record a
-  USB-connected Mini at 320 × 240 RGB, framed so its unloaded markers land on the
-  simulator's marker grid, beside a finished run for direct comparison.
+  USB-connected Mini beside a finished run, cropped and saved (`gs.npz`, BGR)
+  exactly as slip-perception's data collection does, so marker pixel positions
+  match the trial data.
 
 ## Quick start
 

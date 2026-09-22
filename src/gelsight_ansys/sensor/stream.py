@@ -1,7 +1,11 @@
 """View and record a USB GelSight Mini, optionally beside a finished simulation run.
 
 The window shows the live 320 x 240 tactile image and its signed difference
-from an unloaded reference. With ``--sim-run`` it also shows that run's
+from an unloaded reference. By default each frame is cropped and resized
+exactly as slip-perception's data collection does it (gs_sdk ``resize_crop``,
+a 1/25 border), and recordings are saved as that collection's ``gs.npz``, so
+marker pixel positions agree with the trial data. With ``--sim-run`` it also
+shows that run's
 ``images/frame_XXXX.png`` and their difference from the run's unloaded frame,
 on the same scale, so a press on the real gel can be compared with the
 simulated one while it happens.
@@ -59,12 +63,13 @@ def parser():
     )
     p.add_argument(
         "--crop",
-        default="full",
+        default="gs_sdk",
         help=(
-            "full (whole sensor, as gs.npz); gsrobotics (the SDK's 1/7-border crop);"
-            " x0,y0,x1,y1 in raw pixels; or grid:ROWSxCOLS[:MARGIN] to warp the detected"
-            " unloaded markers onto the simulator's marker grid (bare 'grid' reads it from"
-            " --sim-run's config.json, else 11x17:10)"
+            "gs_sdk (default: the data collection's resize_crop, 1/25 border);"
+            " gsrobotics (upstream SDK and stream_gelsight_utils.py, 1/7 border);"
+            " full (whole sensor); x0,y0,x1,y1 in raw pixels; or grid:ROWSxCOLS[:MARGIN]"
+            " to warp the unloaded markers onto a sim preset's marker grid instead (bare"
+            " 'grid' reads it from --sim-run's config.json, else 11x17:10)"
         ),
     )
     p.add_argument(
@@ -139,11 +144,11 @@ def grid_spec(crop, sim_run):
     return f"grid:{rows}x{cols}:{margin_y:g},{margin_x:g}"
 
 
-def draw_grid(rgb, points):
-    """The simulator's unloaded marker centers as small crosses on a copy of ``rgb``."""
+def draw_grid(bgr, points):
+    """The simulator's unloaded marker centers as small crosses on a copy of ``bgr``."""
     import cv2
 
-    image = rgb.copy()
+    image = bgr.copy()
     for x, y in points:
         cv2.drawMarker(
             image, (int(round(x)), int(round(y))), (255, 0, 255), cv2.MARKER_CROSS, 5, 1
@@ -162,7 +167,7 @@ def parse_controls(items):
 
 
 def load_sim_run(run, size):
-    """``(frames, reference)`` as RGB arrays at ``size``; the reference is the unloaded frame.
+    """``(frames, reference)`` as BGR arrays at ``size``; the reference is the unloaded frame.
 
     General-contact runs render the unloaded reference as frame 0; plane runs
     save it separately as ``unloaded_reference.png`` (see docs/dataset.md).
@@ -174,10 +179,10 @@ def load_sim_run(run, size):
         raise SystemExit(f"{run} has no images/frame_XXXX.png")
 
     def load(path):
-        rgb = cv2.cvtColor(cv2.imread(str(path)), cv2.COLOR_BGR2RGB)
-        if (rgb.shape[1], rgb.shape[0]) != size:
-            rgb = cv2.resize(rgb, size, interpolation=cv2.INTER_AREA)
-        return rgb
+        bgr = cv2.imread(str(path))
+        if (bgr.shape[1], bgr.shape[0]) != size:
+            bgr = cv2.resize(bgr, size, interpolation=cv2.INTER_AREA)
+        return bgr
 
     frames = [load(path) for path in paths]
     unloaded = run / "unloaded_reference.png"
@@ -185,10 +190,10 @@ def load_sim_run(run, size):
     return frames, reference
 
 
-def labelled(rgb, text, scale):
+def labelled(bgr, text, scale):
     import cv2
 
-    image = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+    image = bgr
     if scale != 1:
         image = cv2.resize(
             image, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST
@@ -325,20 +330,20 @@ def run_window(session):
                 continue
 
             live = (
-                draw_grid(frame.rgb, grid)
+                draw_grid(frame.image, grid)
                 if show_grid and grid is not None
-                else frame.rgb
+                else frame.image
             )
             top = [labelled(live, f"live  #{frame.index}", args.scale)]
             bottom = []
             if show_difference:
                 if session.reference is not None:
-                    difference = signed_difference(frame.rgb, session.reference, gain)
+                    difference = signed_difference(frame.image, session.reference, gain)
                     bottom.append(
                         labelled(difference, f"live - reference  (x{gain:g})", args.scale)
                     )
                 else:
-                    blank = np.full_like(frame.rgb, 128)
+                    blank = np.full_like(frame.image, 128)
                     bottom.append(labelled(blank, "no reference yet", args.scale))
             if sim_frames is not None:
                 if sim_playing and time.monotonic() >= sim_next:
@@ -399,11 +404,11 @@ def run_window(session):
             elif key == ord("s"):
                 stamp = time.strftime("%Y%m%d-%H%M%S")
                 path = args.output_dir / "snapshots" / f"{stamp}_{frame.index:06d}.png"
-                write_png(path, frame.rgb)
+                write_png(path, frame.image)
                 if session.reference is not None:
                     write_png(
                         path.with_name(path.stem + "_diff.png"),
-                        signed_difference(frame.rgb, session.reference, gain),
+                        signed_difference(frame.image, session.reference, gain),
                     )
                 session.say(f"Snapshot {path}")
             elif key == ord("d"):
@@ -458,7 +463,7 @@ def main(argv=None):
         how = f"crop {framing.box}"
     print(
         f"{name or device}: raw {camera.raw_size[0]}x{camera.raw_size[1]}, {how},"
-        f" decoded at 1/{camera.reduction}, output {camera.output_size[0]}x{camera.output_size[1]} RGB",
+        f" decoded at 1/{camera.reduction}, output {camera.output_size[0]}x{camera.output_size[1]} BGR",
         flush=True,
     )
     session = Session(args, camera, name)

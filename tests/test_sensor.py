@@ -27,6 +27,27 @@ from gelsight_ansys.sensor.stream import grid_spec
 ROWS, COLS, MARGIN = 11, 17, (10.0, 10.0)
 
 
+def reference_resize_crop(img, imgw, imgh, fraction):
+    """The SDK's resize_crop as written: gs_sdk uses 1/25, gs-marker-utils 1/7."""
+    border_size_x, border_size_y = (
+        int(img.shape[0] * fraction),
+        int(np.floor(img.shape[1] * fraction)),
+    )
+    cropped_imgh = img.shape[0] - 2 * border_size_x
+    cropped_imgw = img.shape[1] - 2 * border_size_y
+    extra_border_h = 0
+    extra_border_w = 0
+    if cropped_imgh * imgw / imgh > cropped_imgw + 1e-8:
+        extra_border_h = int(cropped_imgh - cropped_imgw * imgh / imgw)
+    elif cropped_imgh * imgw / imgh < cropped_imgw - 1e-8:
+        extra_border_w = int(cropped_imgw - cropped_imgh * imgw / imgh)
+    img = img[
+        border_size_x + extra_border_h : img.shape[0] - border_size_x,
+        border_size_y + extra_border_w : img.shape[1] - border_size_y,
+    ]
+    return cv2.resize(img, (imgw, imgh))
+
+
 def distorted_lattice(raw_size=mini.RAW_SIZE):
     """Marker centers with rotation, keystone and barrel distortion, in raw px."""
     width, height = raw_size
@@ -67,6 +88,10 @@ class CropTests(unittest.TestCase):
     def test_full_keeps_the_whole_sensor(self):
         self.assertEqual(mini.crop_box("full"), (0, 0, 3280, 2464))
 
+    def test_gs_sdk_crop_is_the_data_collections(self):
+        # 1/25 borders of 98 rows and 131 columns, then 4 more rows for 4:3.
+        self.assertEqual(mini.crop_box("gs_sdk"), (131, 102, 3149, 2366))
+
     def test_gsrobotics_matches_resize_crop_mini(self):
         # 1/7 borders of 352 and 468 px, then 2 more rows for a 4:3 output.
         self.assertEqual(mini.crop_box("gsrobotics"), (468, 354, 2812, 2112))
@@ -77,11 +102,6 @@ class CropTests(unittest.TestCase):
             mini.crop_box("0,0,4000,100")
         with self.assertRaises(ValueError):
             mini.crop_box("middle")
-
-    def test_reduction_never_decodes_below_output_size(self):
-        self.assertEqual(mini.decode_reduction((0, 0, 3280, 2464)), 8)
-        self.assertEqual(mini.decode_reduction((0, 0, 1300, 1000)), 4)
-        self.assertEqual(mini.decode_reduction((0, 0, 400, 300)), 1)
 
     def test_grid_specification(self):
         self.assertEqual(mini.parse_grid("grid:11x17"), (11, 17, (10.0, 10.0)))
@@ -147,28 +167,28 @@ class FramingTests(unittest.TestCase):
         self.assertGreater(framing.grid["homography_rms_residual_px"], 0.5)
         self.assertEqual(framing.reduction, 8)
         rgb = framing.apply(mini.decode_jpeg(self.jpeg, framing.reduction))
-        self.assertEqual(rgb.shape, (240, 320, 3))
+        self.assertEqual(rgb.shape, (240, 320, 3))  # BGR, like every output
         # ... but the lattice remap lands every marker where the simulator draws it.
-        found = mini.order_grid(
-            mini.detect_markers(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), (320, 240)),
-            ROWS,
-            COLS,
-        )
+        found = mini.order_grid(mini.detect_markers(rgb, (320, 240)), ROWS, COLS)
         error = np.linalg.norm(found - mini.sim_marker_pixels(ROWS, COLS, MARGIN), axis=1)
         self.assertLess(np.sqrt(np.mean(error**2)), 0.35)
         self.assertLess(error.max(), 0.8)
 
-    def test_every_reduction_gives_the_same_image(self):
-        framing = mini.Framing.crop("full")
-        full = framing.apply(mini.decode_jpeg(self.jpeg, 1)).astype(int)
-        for reduction in (2, 4, 8):
-            reduced = framing.apply(mini.decode_jpeg(self.jpeg, reduction)).astype(int)
-            self.assertLess(np.abs(reduced - full).mean(), 1.5, reduction)
+    def test_sdk_crops_reproduce_resize_crop_pixel_for_pixel(self):
+        raw = mini.decode_jpeg(self.jpeg, 1)
+        for spec, fraction in (("gs_sdk", 1 / 25), ("gsrobotics", 1 / 7)):
+            framing = mini.Framing.crop(spec)
+            self.assertEqual(framing.reduction, 1)
+            np.testing.assert_array_equal(
+                framing.apply(mini.decode_jpeg(self.jpeg, framing.reduction)),
+                reference_resize_crop(raw, 320, 240, fraction),
+                err_msg=spec,
+            )
 
-    def test_output_is_rgb(self):
-        rgb = mini.Framing.crop("full").apply(mini.decode_jpeg(self.jpeg, 8))
-        background = rgb[5, 160]
-        self.assertLess(background[2], background[1])  # blue was dimmed in BGR slot 0
+    def test_output_stays_bgr(self):
+        bgr = mini.Framing.crop("gs_sdk").apply(mini.decode_jpeg(self.jpeg, 1))
+        background = bgr[5, 160]
+        self.assertLess(background[0], background[1])  # blue was dimmed in slot 0
 
 
 class DifferenceTests(unittest.TestCase):
@@ -186,7 +206,7 @@ class DifferenceTests(unittest.TestCase):
 
 @unittest.skipIf(cv2 is None, "opencv is the optional [sensor] extra")
 class RecordingTests(unittest.TestCase):
-    def test_round_trip(self):
+    def test_round_trip_in_the_trial_gs_npz_format(self):
         with tempfile.TemporaryDirectory() as tmp:
             recording = mini.Recording(
                 tmp, {"kind": "test"}, (4, 3), label="press 1/a", save_raw=True
@@ -195,13 +215,24 @@ class RecordingTests(unittest.TestCase):
             frames = np.random.default_rng(1).integers(
                 0, 255, (5, 3, 4, 3), dtype=np.uint8
             )
-            for k, rgb in enumerate(frames):
-                index = k if k < 3 else k + 1  # one frame lost between 2 and 4
+            devices = [0, 1, 2, 4, 5]  # one frame lost between 2 and 4
+            for k, (image, index) in enumerate(zip(frames, devices, strict=True)):
                 recording.add(
-                    mini.Frame(rgb, b"jpeg", 1_000_000_000 + k * 50_000_000, index)
+                    mini.Frame(image, b"jpeg", 1_000_000_000 + k * 50_000_000, index)
                 )
             recording.save_reference(frames[0], 1)
             path = recording.close()
+
+            # The keys fast_stream_device.py writes, plus the camera's frame count.
+            with np.load(path / "gs.npz", allow_pickle=False) as data:
+                self.assertEqual(
+                    sorted(data.files),
+                    ["device_frame_idx", "frame_idx", "frames", "t_ns", "timestamps"],
+                )
+                np.testing.assert_array_equal(data["frame_idx"], np.arange(5))
+                np.testing.assert_array_equal(data["timestamps"], data["t_ns"])
+                np.testing.assert_array_equal(data["device_frame_idx"], devices)
+                self.assertEqual(data["t_ns"].dtype, np.int64)
 
             loaded = mini.load_recording(path)
             np.testing.assert_array_equal(loaded["frames"], frames)
