@@ -27,6 +27,14 @@ feature facing +z:
 | `hemisphere-large.stl` | Spherical cap | 50 mm | tip at (0, 0, 50) |
 | `hemisphere-small.stl` | Spherical cap | 10 mm | tip at (0, 0, 15.85) |
 
+`cylinder-r10-fine.stl`, `cylinder-r50-fine.stl`, `hemisphere-r10-fine.stl`
+and `hemisphere-r50-fine.stl` are finer tessellations of `cylinder-small`,
+`cylinder-large`, `hemisphere-small` and `hemisphere-large`, with the same
+bounds and placement. The two hemispheres have facets about 0.18 and 0.85 mm
+across at the tip, against 0.44 and 2 mm before.
+`cylinder-r50-fine.stl` keeps the plate edges described below and is rejected
+the same way.
+
 `cylinder-large.stl` has two edges shared by four faces, where the pedestal
 walls meet the plate at y=±22.5, z=34.15, so the importer rejects it.
 `cylinder-large-top.stl` keeps its 44 triangles with every vertex at z ≥ 44.6:
