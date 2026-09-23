@@ -228,6 +228,31 @@ class MeshImportTests(unittest.TestCase):
                     config.imported_mesh.reference_point_m,
                 )
 
+    def test_a_rigid_mesh_can_be_pressed_to_a_commanded_load(self):
+        load = {"depth_m": 0.0, "normal_force_n": 0.2, "force_controlled": True}
+        data = self.source(True)
+        data["trajectory"][3].update(load)
+        with self.assertRaisesRegex(ValueError, "Force control currently requires"):
+            Config.from_dict(data, ROOT / "configs")
+        data = self.source()
+        data["trajectory"][3].update(load)
+        config = Config.from_dict(data, ROOT / "configs")
+        config = replace(config, gel=replace(config.gel, elements=(4, 4, 2)))
+        with tempfile.TemporaryDirectory() as tmp:
+            model = AnsysImported(config, Path(tmp) / "solver")
+            model.mapdl = Mock()
+            model.mapdl.input_strings.return_value = "built"
+            model.build()
+            deck = (Path(tmp) / "solver/model.inp").read_text().splitlines()
+        # The pilot's travel is left to the per-step D or F; nothing else moves.
+        pilot = model.pilot
+        self.assertEqual(model.load_node, pilot)
+        self.assertNotIn(f"D,{pilot},ALL,0", deck)
+        for dof in ("UX", "UY", "ROTX", "ROTY", "ROTZ"):
+            self.assertIn(f"D,{pilot},{dof},0", deck)
+        self.assertNotIn(f"D,{pilot},UZ,0", deck)
+        self.assertIn("ANTYPE,TRANS", deck)
+
     def test_rerender_rejects_changed_imported_geometry(self):
         config = self.config()
         with tempfile.TemporaryDirectory() as tmp:

@@ -731,11 +731,9 @@ class Config:
                 raise ValueError(
                     "Deformable spheres and imported volumes currently support translation only"
                 )
-            if not self.is_plane and pose.force_controlled and (
-                self.indenter.deformable or self.indenter.shape == "mesh"
-            ):
+            if not self.is_plane and pose.force_controlled and self.indenter.deformable:
                 raise ValueError(
-                    "Force control currently requires a rigid sphere or flat indenter"
+                    "Force control currently requires a rigid sphere, flat or mesh indenter"
                 )
             previous = pose.time_s
         if self.is_plane:

@@ -15,6 +15,25 @@ and its tip at z=0. Configs declare millimeters explicitly.
   set, and a top `grip` node set. These small meshes demonstrate importing and
   fixture selection; their resolution does not establish mesh convergence.
 
+## Indenters
+
+Printed indenters on their mounting plates, in millimeters, with the contact
+feature facing +z:
+
+| File | Feature | Radius | Feature position |
+|---|---|---|---|
+| `cylinder-large.stl` | Cylinder along x, 45 mm long | 50 mm | ridge at y=0, z=50 |
+| `cylinder-small.stl` | Cylinder along x, 45 mm long | 10 mm | ridge at y=-22.5, z=10 |
+| `hemisphere-large.stl` | Spherical cap | 50 mm | tip at (0, 0, 50) |
+| `hemisphere-small.stl` | Spherical cap | 10 mm | tip at (0, 0, 15.85) |
+
+`cylinder-large.stl` has two edges shared by four faces, where the pedestal
+walls meet the plate at y=±22.5, z=34.15, so the importer rejects it.
+`cylinder-large-top.stl` keeps its 44 triangles with every vertex at z ≥ 44.6:
+the whole R50 arc, unchanged, and 5.4 mm of relief above first touch, beyond
+the 4 mm contact pinball. The arc is faceted at 2.43°, facets 2.1 mm wide
+that stand at most 11 µm off the true cylinder.
+
 See [custom meshes](../../docs/configuration.md#custom-object-meshes) for the
 file schema, units, transforms, and supported material/motion combinations.
 

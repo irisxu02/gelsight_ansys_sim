@@ -38,9 +38,8 @@ class AnsysImported(AnsysGel):
         commands += [
             "TSHAP,PILO",
             f"EN,{first_element + len(data.faces)},{self.pilot}",
-            f"D,{self.pilot},ALL,0",
         ]
-        return commands
+        return commands + self.pilot_constraint_commands()
 
     def additional_geometry(self):
         data = self.config.imported_mesh

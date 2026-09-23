@@ -72,6 +72,11 @@ background, but swaps in a denser 11 × 17 marker grid placed where a second,
 supplied example sensor's raw capture shows its dots.
 [`hemisphere_slide_11x17`](../../configs/hemisphere_slide_11x17.json) slides
 the large hemisphere under the same sensor at 0.5 N.
+[`indenter_slide_11x17`](../../configs/indenter_slide_11x17/) presses each of
+the four [indenter meshes](../../assets/meshes/README.md#indenters) to a
+commanded 1 N, slides it 2 mm along +x at 2.5 mm/s with the load held, then
+unloads. x is the sensor's long edge, and both cylinders lie along it, so they
+slide along their own length.
 See [sensor alignment](../sensor-alignment.md#a-second-example-sensors-marker-grid)
 for what was and was not derived from that capture.
 
