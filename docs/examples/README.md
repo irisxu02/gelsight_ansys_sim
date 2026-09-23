@@ -82,6 +82,8 @@ seated by travel at about 0.1-0.2 N rather than 2 µm past touch, and unloaded t
 0.03 N before lift-off; the small hemisphere, still 0.11 mm deep there, hands
 back to travel at that depth and ramps off. Each slide step integrates with
 mass, which puts a run at 1-4 hours.
+[`indenter_slide_11x17_fine`](../../configs/indenter_slide_11x17_fine/) runs
+the same four trials on the finer tessellations; only the mesh file differs.
 See [sensor alignment](../sensor-alignment.md#a-second-example-sensors-marker-grid)
 for what was and was not derived from that capture.
 

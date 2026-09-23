@@ -33,7 +33,9 @@ and `hemisphere-r50-fine.stl` are finer tessellations of `cylinder-small`,
 bounds and placement. The two hemispheres have facets about 0.18 and 0.85 mm
 across at the tip, against 0.44 and 2 mm before.
 `cylinder-r50-fine.stl` keeps the plate edges described below and is rejected
-the same way.
+the same way; `cylinder-r50-fine-top.stl` is its top arc, cropped by the same
+rule: 108 triangles, 54 facets 0.86 mm wide that stand at most 1.9 µm off the
+cylinder.
 
 `cylinder-large.stl` has two edges shared by four faces, where the pedestal
 walls meet the plate at y=±22.5, z=34.15, so the importer rejects it.

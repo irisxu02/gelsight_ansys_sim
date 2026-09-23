@@ -270,7 +270,7 @@ class UnifiedConfigTests(unittest.TestCase):
             for p in (ROOT / "configs").rglob("*.json")
             if self.source(p).get("config_kind") == "contact_simulation"
         ]
-        self.assertEqual(len(paths), 27)
+        self.assertEqual(len(paths), 31)
         with patch("gelsight_ansys.pipeline.run") as execute:
             for path in paths:
                 with redirect_stdout(io.StringIO()):
