@@ -232,6 +232,20 @@ def status_bar(width, text, recording):
     return bar
 
 
+def window_open(name):
+    """False once the window is closed from its title bar.
+
+    The Qt backend raises, rather than reporting 0, when asked about a window
+    the user has already closed.
+    """
+    import cv2
+
+    try:
+        return cv2.getWindowProperty(name, cv2.WND_PROP_VISIBLE) >= 1
+    except cv2.error:
+        return False
+
+
 class Session:
     def __init__(self, args, camera, device_name):
         self.args = args
@@ -395,7 +409,7 @@ def run_window(session):
             key = cv2.waitKey(1) & 0xFF
             if key in (ord("q"), 27):
                 break
-            if cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) < 1:
+            if not window_open(WINDOW):
                 break
             if key in (ord(" "), ord("r")):
                 session.stop_recording() if recording is not None else session.start_recording()
