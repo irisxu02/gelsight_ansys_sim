@@ -76,7 +76,12 @@ the large hemisphere under the same sensor at 0.5 N.
 the four [indenter meshes](../../assets/meshes/README.md#indenters) to a
 commanded 1 N, slides it 2 mm along +x at 2.5 mm/s with the load held, then
 unloads. x is the sensor's long edge, and both cylinders lie along it, so they
-slide along their own length.
+slide along their own length. The switch between travel and load control is
+stepped, so it only converges where the two nearly agree: the hemispheres are
+seated by travel at about 0.1-0.2 N rather than 2 µm past touch, and unloaded to
+0.03 N before lift-off; the small hemisphere, still 0.11 mm deep there, hands
+back to travel at that depth and ramps off. Each slide step integrates with
+mass, which puts a run at 1-4 hours.
 See [sensor alignment](../sensor-alignment.md#a-second-example-sensors-marker-grid)
 for what was and was not derived from that capture.
 
