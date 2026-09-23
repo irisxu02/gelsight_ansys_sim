@@ -62,6 +62,7 @@ def prepare_optics(config, directory, base_directory):
             "render_mode": config.optics.render_mode,
             "response_gain": config.optics.response_gain,
             "response_smoothing_bins": config.optics.response_smoothing_bins,
+            "response_rotation_deg": config.optics.response_rotation_deg,
             "response_interpolation": "periodic cubic"
             if config.optics.model == "taxim"
             else "analytic",

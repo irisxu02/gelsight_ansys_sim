@@ -13,6 +13,7 @@ dependencies = ["ansys-mapdl-core==0.74.1", "ansys-mapdl-reader==0.56.0", "numpy
 [project.optional-dependencies]
 gpu = ["warp-lang>=1.17"]
 mechanical = ["ansys-mechanical-core==0.13.2"]
+sensor = ["opencv-python>=4.9"]
 
 [project.scripts]
 gelsight-ansys = "gelsight_ansys.cli:main"

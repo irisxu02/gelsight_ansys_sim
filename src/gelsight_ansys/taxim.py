@@ -38,8 +38,22 @@ def cubic_weights(t):
     )
 
 
-def evaluate(table, features, normals):
-    u, v = angular_coordinates(normals)
+def rotate_normals(normals, rotation_deg):
+    """Normals whose in-plane part is turned by ``-rotation_deg``.
+
+    Looking the table up with these turns the rendered colour pattern by
+    ``+rotation_deg``, counterclockwise as seen in the image: gel x is right and
+    gel y up, so a counterclockwise turn in the gel plane is one on screen.
+    """
+    if rotation_deg == 0:
+        return normals
+    c, s = np.cos(np.radians(rotation_deg)), np.sin(np.radians(rotation_deg))
+    nx, ny, nz = np.moveaxis(np.asarray(normals, dtype=float), -1, 0)
+    return np.stack((c * nx + s * ny, -s * nx + c * ny, nz), axis=-1)
+
+
+def evaluate(table, features, normals, rotation_deg=0.0):
+    u, v = angular_coordinates(rotate_normals(normals, rotation_deg))
     u = np.clip(u, 0, table.shape[0] - 1)
     i, j = np.floor(u).astype(int), np.floor(v).astype(int)
     a, b = cubic_weights(u - i), cubic_weights(v - j)
@@ -68,8 +82,8 @@ def smooth_response(table, sigma):
 
 
 class TaximResponse:
-    def __init__(self, camera, gain, smoothing_bins=2.0):
-        self.camera, self.gain = camera, gain
+    def __init__(self, camera, gain, smoothing_bins=2.0, rotation_deg=0.0):
+        self.camera, self.gain, self.rotation_deg = camera, gain, rotation_deg
         with np.load(ASSETS / "polycalib.npz", allow_pickle=False) as data:
             self.table = np.stack(
                 [data[k] for k in ("grad_r", "grad_g", "grad_b")], axis=2
@@ -95,6 +109,8 @@ class TaximResponse:
 
     def shade(self, normals, valid, background):
         delta = (
-            (evaluate(self.table, self.features, normals) - self.flat) * self.gain / 255
+            (evaluate(self.table, self.features, normals, self.rotation_deg) - self.flat)
+            * self.gain
+            / 255
         )
         return np.clip(background + np.where(valid[..., None], delta, 0), 0, 1)

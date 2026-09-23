@@ -27,12 +27,20 @@ def response_kernel(
     flat: wp.array(dtype=wp.vec3),
     background: wp.array(dtype=wp.vec3),
     gain: float,
+    rotation_cos: float,
+    rotation_sin: float,
     output: wp.array(dtype=wp.vec3),
 ):
     p = wp.tid()
     rgb = background[p]
     if valid[p] != 0:
-        n = normals[p]
+        m = normals[p]
+        # taxim.rotate_normals: turn the in-plane part by -rotation.
+        n = wp.vec3(
+            rotation_cos * m[0] + rotation_sin * m[1],
+            -rotation_sin * m[0] + rotation_cos * m[1],
+            m[2],
+        )
         slope = wp.sqrt(n[0] * n[0] + n[1] * n[1])
         mag = wp.atan2(slope, wp.max(n[2], 1.0e-12))
         direction = float(0.0)
@@ -64,6 +72,8 @@ class CudaTaximResponse:
     def __init__(self, response, background, device):
         self.device = device
         self.gain = response.gain
+        angle = np.radians(getattr(response, "rotation_deg", 0.0))
+        self.rotation = (float(np.cos(angle)), float(np.sin(angle)))
         self.table = wp.array(
             np.asarray(response.table, dtype=np.float32), dtype=float, device=device
         )
@@ -96,6 +106,8 @@ class CudaTaximResponse:
                 self.flat,
                 self.background,
                 self.gain,
+                self.rotation[0],
+                self.rotation[1],
                 self.output,
             ],
             device=self.device,

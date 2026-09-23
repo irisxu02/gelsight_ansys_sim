@@ -76,6 +76,7 @@ class Renderer:
                 self.camera,
                 self.optics.response_gain,
                 self.optics.response_smoothing_bins,
+                self.optics.response_rotation_deg,
             )
             self.background = self.response.background.copy()
         if self.optics.background_image:

@@ -77,6 +77,10 @@ Solver GPU acceleration is available as an explicit option.
 - **[Finite-element views](docs/dataset.md#finite-element-views):** the deformed
   mesh with its element edges, contoured by contact pressure and by total
   displacement, written frame by frame while the run solves.
+- **[Live GelSight Mini capture](docs/live-sensor.md):** view and record a
+  USB-connected Mini beside a finished run, cropped and saved (`gs.npz`, BGR)
+  exactly as slip-perception's data collection does, so marker pixel positions
+  match the trial data.
 
 ## Quick start
 
@@ -335,6 +339,7 @@ Start with the [documentation index](docs/README.md).
 | Uniform gel, coating simplification, object materials, and friction | [Materials and contact](docs/materials-and-contact.md) |
 | Plane material models, config composition, and native adapters | [Material comparison](docs/plane-material-adapters.md) |
 | Camera, field of view, and markers | [Sensor alignment](docs/sensor-alignment.md) |
+| Viewing and recording a physical GelSight Mini | [Live sensor](docs/live-sensor.md) |
 | Arrays, units, and visualization | [Dataset](docs/dataset.md) |
 | Implementation and solver lifecycle | [Architecture](docs/architecture.md) |
 | Numerical checks and recorded results | [Verification](docs/verification.md) |

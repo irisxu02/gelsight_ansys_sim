@@ -191,6 +191,9 @@ class Optics:
     render_mode: str = "raw"
     response_gain: float = 2.0
     response_smoothing_bins: float = 2.0
+    # Counterclockwise rotation (as seen in the image) of the response's colour
+    # pattern, for a sensor whose lights sit rotated from the example table's.
+    response_rotation_deg: float = 0.0
     backend: str = "cuda"
     ambient: float = 0.12
     diffuse: float = 0.55
@@ -666,6 +669,8 @@ class Config:
             or not 0 <= self.optics.response_smoothing_bins <= 8
         ):
             raise ValueError("response_smoothing_bins must be in [0, 8]")
+        if not math.isfinite(self.optics.response_rotation_deg):
+            raise ValueError("optics.response_rotation_deg must be finite")
         if self.optics.backend not in ("cuda", "cpu"):
             raise ValueError("optics.backend must be cuda or cpu")
         if not 0 <= self.optics.marker_opacity <= 1:

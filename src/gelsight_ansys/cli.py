@@ -278,6 +278,11 @@ def main(argv=None):
     render.add_argument("--run", type=Path, required=True)
     render.add_argument("--output", type=Path, default=Path("outputs"))
     render.add_argument("--backend", choices=("cpu", "cuda"))
+    render.add_argument(
+        "--config",
+        type=Path,
+        help="Re-render with this config's optics; its mechanics must match the run's",
+    )
     for command in (solve, render):
         command.add_argument(
             "--subtract-background",
@@ -352,6 +357,7 @@ def main(argv=None):
                 args.output,
                 args.backend,
                 render_mode="subtracted" if args.subtract_background else None,
+                config_path=args.config,
             )
         print(
             f"{summary['status']}: {len(summary['frames'])} frames. Results: {directory}"
