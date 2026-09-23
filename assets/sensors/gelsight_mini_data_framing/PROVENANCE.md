@@ -21,7 +21,8 @@ recordings of the unloaded gel that day:
 | Symmetric margins (y, x) | 46.4, 42.9 px | Centered grid with the measured extent |
 | Grid center | (161.9–166.6, 122.7–123.8) px | Moves between sessions: see below |
 | Grid tilt | 0.5–0.6° | Not representable in the simulator's grid |
-| Dot radius | 0.25 mm (preset) | Dark core measures 3.4 px = 0.22 mm; visible dot ~4 px |
+| Dot radius | 0.22 mm | Real dark core 3.39 px; renders 3.43 px (0.25 mm rendered 3.87 px) |
+| Colour rotation | 90° counterclockwise | `optics.response_rotation_deg`, matched by eye to the recorded sphere presses |
 | Scale | 0.0634 mm/px | `gs_sdk` `gsmini.yaml` `ppmm`, *not measured on this unit* |
 | Camera FOV | 20.288 × 15.216 mm | 320 × 240 px × 0.0634 mm/px |
 

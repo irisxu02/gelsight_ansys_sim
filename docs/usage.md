@@ -353,6 +353,10 @@ example-sensor background plus the normal-dependent change in optical response.
 `optics.response_gain` scales that change (default 2).
 `optics.response_smoothing_bins` regularizes the angular calibration table
 (default sigma 2 bins); cubic interpolation keeps its gradients continuous.
+`optics.response_rotation_deg` turns the response's colour pattern
+counterclockwise as seen in the image (default 0). Use it for a sensor whose
+lights sit rotated from the example table's: the table is looked up with each
+surface normal's tilt direction turned the other way.
 This acts on the optical model, not on saved mechanical fields or marker motion. This is a nominal appearance
 model; see [asset provenance](../src/gelsight_ansys/data/mini/PROVENANCE.md).
 
@@ -406,8 +410,10 @@ Warp and a working NVIDIA driver. Replay creates a new output directory and
 retains the original mechanics evidence.
 
 Edit the copied run's `config.json` optics or visualization settings before
-replay. Changes to the gel, object, contact, or trajectory require a new
-mechanics solve. `optics.background_image` must match the image dimensions; use
+replay, or pass `--config` with a config file whose optics to use; relative
+paths in it, such as `optics.background_image`, resolve from that file's folder.
+Changes to the gel, object, contact, or trajectory require a new mechanics
+solve, and a `--config` that changes them is rejected. `optics.background_image` must match the image dimensions; use
 a marker-free or inpainted background because existing photographed marks are
 not independently tracked.
 

@@ -201,10 +201,21 @@ def run(
     return directory, summary
 
 
-def rerender(source, output, backend=None, progress=print, render_mode=None):
-    """Replay validated states; retain original mechanics provenance and units."""
+def rerender(
+    source, output, backend=None, progress=print, render_mode=None, config_path=None
+):
+    """Replay validated states; retain original mechanics provenance and units.
+
+    ``config_path`` replays with that config's optics instead of the run's own;
+    its mechanics are held to the run's by the same check as any replay.
+    """
     source = Path(source)
-    config = Config.load(source / "config.json", validate=False)
+    if config_path is not None:
+        config_path = Path(config_path)
+        config, optics_base = Config.load(config_path), config_path.parent
+    else:
+        config = Config.load(source / "config.json", validate=False)
+        optics_base = source
     if config.is_plane:
         raise ValueError(
             "Plane replay requires its separate unloaded reference; use run --config for a new solve"
@@ -255,7 +266,7 @@ def rerender(source, output, backend=None, progress=print, render_mode=None):
     summary.pop("error_type", None)
     summary.pop("report_elapsed_s", None)
     with RunLifecycle(directory, summary, started=started) as lifecycle:
-        config, renderer = prepare_optics(config, directory, source)
+        config, renderer = prepare_optics(config, directory, optics_base)
         import shutil
 
         if (source / "solid_mesh.npz").is_file():

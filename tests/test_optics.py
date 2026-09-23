@@ -78,6 +78,33 @@ class RawOpticsTests(unittest.TestCase):
         right = (value(tilt, -np.pi + eps) - center) / eps
         np.testing.assert_allclose(left, right, atol=0.05, rtol=1e-4)
 
+    def test_response_rotation_turns_the_colour_pattern_counterclockwise(self):
+        from gelsight_ansys.taxim import TaximResponse, evaluate, rotate_normals
+
+        c, _ = self.setup_scene()
+        response = TaximResponse(c.camera, 2, 2)
+        tilt = np.sin(np.radians(12))
+        toward_y = np.array([0.0, tilt, np.cos(np.radians(12))])
+        toward_x = np.array([tilt, 0.0, np.cos(np.radians(12))])
+        np.testing.assert_array_equal(rotate_normals(toward_y, 0), toward_y)
+        # Turned 90 deg, a tilt toward +y (image up) takes the colour a tilt
+        # toward +x had: the pattern's right side has moved to its top.
+        np.testing.assert_allclose(
+            evaluate(response.table, response.features, toward_y, 90.0),
+            evaluate(response.table, response.features, toward_x),
+            atol=1e-9,
+        )
+        # A flat gel has no tilt direction, so rotation cannot change it.
+        rotated = Renderer(replace(c, optics=replace(c.optics, response_rotation_deg=90)))
+        plain = Renderer(c)
+        fields = self.setup_scene()[1]
+        marker = np.array([[90.0, 90.0]])
+        np.testing.assert_array_equal(
+            rotated.render(fields, marker, marker), plain.render(fields, marker, marker)
+        )
+        with self.assertRaises(ValueError):
+            replace(c, optics=replace(c.optics, response_rotation_deg=float("nan"))).validate()
+
     def test_difference_keeps_both_signs_marker_motion_and_release(self):
         c, fields = self.setup_scene("subtracted")
         renderer = Renderer(c)
@@ -100,11 +127,10 @@ class RawOpticsTests(unittest.TestCase):
     def test_cuda_raw_and_subtracted_match_cpu_with_surface_tilt(self):
         c, fields = self.setup_scene()
         marker = np.array([[90.0, 90.0]])
-        for mode in ("raw", "subtracted"):
-            cpu = Renderer(replace(c, optics=replace(c.optics, render_mode=mode)))
-            gpu = Renderer(
-                replace(c, optics=replace(c.optics, render_mode=mode, backend="cuda"))
-            )
+        for mode, rotation in (("raw", 0.0), ("subtracted", 0.0), ("raw", 90.0)):
+            optics = replace(c.optics, render_mode=mode, response_rotation_deg=rotation)
+            cpu = Renderer(replace(c, optics=optics))
+            gpu = Renderer(replace(c, optics=replace(optics, backend="cuda")))
             cpu.render(fields, marker, marker)
             gpu.render(fields, marker, marker)
             deformed = {k: v.copy() for k, v in fields.items()}

@@ -162,7 +162,7 @@ force that reproduce it:
 python scripts/analyze_presses.py outputs/gelsight_mini/<recording> outputs/<sphere run>
 # A blunt tip: match by shading, scaled by that ratio.
 python scripts/analyze_presses.py outputs/gelsight_mini/<recording> outputs/<blunt run> \
-    --by shading --shading-scale 0.69
+    --by shading --shading-scale 0.71
 ```
 
 ### Sensor preset in the data framing
@@ -176,6 +176,8 @@ the camera and appearance (see
 |---|---|
 | Camera FOV | 20.288 × 15.216 mm: 320 × 240 px at `gs_sdk`'s 0.0634 mm/px |
 | Marker grid | 11 × 17, margins 46.4 (y) and 42.9 (x) px, measured from the unloaded gel |
+| Marker radius | 0.22 mm: renders a 3.43 px dark core against 3.39 px measured |
+| Colour response | Example Mini table, `response_rotation_deg` 90: this sensor's colour pattern is the table's turned 90° counterclockwise |
 | Background | The real unloaded frame with its markers inpainted |
 
 A simulated unloaded frame has a marker pitch of 14.57 × 14.62 px, against
@@ -195,14 +197,14 @@ itself fails the contact/backing force balance on the tapered pad (24 % at
 
 | Tip | Matched by | Real press | Simulated depth | Simulated force |
 |---|---|---|---|---|
-| 10 mm sphere (4 presses) | patch | radius 3.53–4.06 mm | 0.78–0.99 mm, median 0.89 | 0.93–1.51 N, median 1.21 |
-| 50 mm hemisphere (4 presses) | shading, × 1 / 0.69 | shading 8.5–11.6 | 0.24–0.32 mm, median 0.29 | 0.45–0.80 N, median 0.61 |
+| 10 mm sphere (4 presses) | patch | radius 3.53–4.06 mm | 0.76–0.96 mm, median 0.87 | 0.88–1.39 N, median 1.14 |
+| 50 mm hemisphere (4 presses) | shading, × 1 / 0.71 | shading 8.5–11.6 | 0.28–0.38 mm, median 0.33 | 0.61–1.15 N, median 0.86 |
 
 The hemisphere's patch is too faint and ragged to size. The simulated patch
 radius grows 42.7, 50.9, 52.4 px over 0.20–0.30 mm, then jumps to 68.7 px. Its
-presses are therefore matched by shading instead. The 0.69 ratio comes from the
-sphere presses matched by patch (range 0.58–0.88): the simulator shades about
-1.45 times more strongly than this sensor. The hemisphere presses also move the
+presses are therefore matched by shading instead. The 0.71 ratio comes from the
+sphere presses matched by patch (range 0.59–0.91): the simulator shades about
+1.4 times more strongly than this sensor. The hemisphere presses also move the
 whole gel sideways, leaving marker ghosts across the field and the gel walls,
 which the simulated normal press does not reproduce.
 
@@ -240,14 +242,16 @@ Do this when a robot and force/torque sensor are available. Until then,
    pad's thickness and face size too: the preset assumes a 22 × 16 mm face,
    5 mm thick, but the visible face is closer to 18 × 12.6 mm.
 4. **Photometric response.** The simulator shades with the stock MMintLab
-   Mini table (`data/mini/polycalib.npz`). Its colour wheel is rotated about
-   60–90° from this sensor's, and more saturated (`response_gain` 2.0). Run
-   `gs_sdk`'s ball-press calibration (`calibration/`) on this unit and use the
-   fitted table; then set `response_gain` against a recorded press. The real
-   shading is 0.69 times the simulated (see above). Once the response matches,
-   `--by shading` needs no `--shading-scale`.
-5. **Markers.** Dot radius (0.25 mm in the preset; the real dark core is about
-   0.22 mm) and the 0.5° grid tilt.
+   Mini table (`data/mini/polycalib.npz`), turned 90° counterclockwise by
+   `response_rotation_deg` to match this sensor's colour layout by eye. It is
+   still more saturated (`response_gain` 2.0; the real shading is 0.71 times
+   the simulated), and its per-pixel spatial terms are the other unit's. Run
+   `gs_sdk`'s ball-press calibration (`calibration/`) on this unit, use the
+   fitted table without the rotation, and set `response_gain` against a
+   recorded press. Once the response matches, `--by shading` needs no
+   `--shading-scale`.
+5. **Markers.** The 0.22 mm radius matches the dark-core area, but the real
+   dots are elliptical (about 8 × 6 px) and the real grid is tilted 0.5°.
 6. **Force axis and position.** With the F/T sensor, record the tangential
    force and robot pose for each press, so a press's force and position come
    from measurement rather than from matching patch size.

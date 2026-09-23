@@ -130,7 +130,7 @@
       ]
     ],
     "marker_spacing_m": 0.0009256,
-    "marker_radius_m": 0.00025,
+    "marker_radius_m": 0.00022,
     "marker_opacity": 0.45,
     "background_image": "../assets/sensors/gelsight_mini_data_framing/background.png",
     "animation_fps": 5,
@@ -147,7 +147,8 @@
     "model": "taxim",
     "render_mode": "raw",
     "response_gain": 2.0,
-    "response_smoothing_bins": 2.0
+    "response_smoothing_bins": 2.0,
+    "response_rotation_deg": 90.0
   },
   "trajectory": [
     {
