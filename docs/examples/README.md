@@ -84,6 +84,12 @@ back to travel at that depth and ramps off. Each slide step integrates with
 mass, which puts a run at 1-4 hours.
 [`indenter_slide_11x17_fine`](../../configs/indenter_slide_11x17_fine/) runs
 the same four trials on the finer tessellations; only the mesh file differs.
+The fine small cylinder slides and holds 1 N, then fails the contact-backing
+force balance on the step down to 0.5 N (contact 0.44 N against 0.50 N at the
+backing, with or without stabilization damping), so
+[`cylinder_small_press`](../../configs/indenter_slide_11x17_fine/cylinder_small_press.json)
+covers its load and unload on their own: the same press, hold, unload and
+lift-off with the slide left out.
 See [sensor alignment](../sensor-alignment.md#a-second-example-sensors-marker-grid)
 for what was and was not derived from that capture.
 
