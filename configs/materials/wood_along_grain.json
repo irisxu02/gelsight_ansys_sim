@@ -1,0 +1,16 @@
+{
+  "config_kind": "object_material_case",
+  "name": "wood_along_grain",
+  "calibrated": false,
+  "description": "Wood - stiffness along grain. Typical hardwood like oak or maple.",
+  "material": {
+    "model": "linear",
+    "young_pa": 12.0e9,
+    "poisson": 0.35,
+    "density_kg_m3": 750
+  },
+  "contact": {
+    "friction_coefficient": 0.5,
+    "notes": "Stiffness varies significantly with grain direction; use wood_across_grain for perpendicular loading"
+  }
+}

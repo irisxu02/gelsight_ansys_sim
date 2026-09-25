@@ -1,0 +1,16 @@
+{
+  "config_kind": "object_material_case",
+  "name": "concrete",
+  "calibrated": false,
+  "description": "Concrete - rigid ceramic-like material. High stiffness, brittle.",
+  "material": {
+    "model": "linear",
+    "young_pa": 30.0e9,
+    "poisson": 0.17,
+    "density_kg_m3": 2400
+  },
+  "contact": {
+    "friction_coefficient": 0.5,
+    "notes": "Typical concrete; note low Poisson ratio (~0.15-0.20) is characteristic"
+  }
+}

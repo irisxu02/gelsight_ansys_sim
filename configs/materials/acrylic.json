@@ -1,0 +1,16 @@
+{
+  "config_kind": "object_material_case",
+  "name": "acrylic",
+  "calibrated": false,
+  "description": "Acrylic (PMMA) - rigid clear plastic. Used for transparent indenters.",
+  "material": {
+    "model": "linear",
+    "young_pa": 3.2e9,
+    "poisson": 0.40,
+    "density_kg_m3": 1190
+  },
+  "contact": {
+    "friction_coefficient": 0.45,
+    "notes": "Slightly softer than resin; clear optical properties useful for visualization"
+  }
+}

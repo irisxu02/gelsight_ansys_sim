@@ -1,0 +1,16 @@
+{
+  "config_kind": "object_material_case",
+  "name": "silicone",
+  "calibrated": false,
+  "description": "Silicone elastomer - soft, flexible, temperature-resistant polymer.",
+  "material": {
+    "model": "neo_hookean",
+    "young_pa": 2.0e6,
+    "poisson": 0.49,
+    "density_kg_m3": 1100
+  },
+  "contact": {
+    "friction_coefficient": 0.6,
+    "notes": "Softer than rubber; often used in seals and gaskets. Hyperelastic behavior."
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "config_kind": "object_material_case",
+  "name": "steel",
+  "calibrated": false,
+  "description": "Steel - mild steel or stainless steel. Rigid metal with high stiffness.",
+  "material": {
+    "model": "linear",
+    "young_pa": 200.0e9,
+    "poisson": 0.30,
+    "density_kg_m3": 7850
+  },
+  "contact": {
+    "friction_coefficient": 0.6,
+    "notes": "High stiffness typical of ferrous metals"
+  }
+}
