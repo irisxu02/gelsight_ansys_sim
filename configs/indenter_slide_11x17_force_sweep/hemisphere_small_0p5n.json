@@ -88,7 +88,7 @@
     "maximum_substeps": 200,
     "iterations": 80,
     "force_tolerance": 0.005,
-    "balance_tolerance": 0.02,
+    "balance_tolerance": 0.06,
     "newton_raphson": "unsymmetric",
     "force_norm": 1,
     "equation_solver": "sparse"

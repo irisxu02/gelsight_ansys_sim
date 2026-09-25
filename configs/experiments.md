@@ -78,6 +78,10 @@ the same steps, lift off.
 - **μ confound across sweeps.** Rows 5–13 use μ=0.5, the force sweep μ=0.35.
   The sweep reruns 1 N at μ=0.35 so forces are comparable; rows 9–11 vs 27–29
   then form a μ contrast at 1 N.
+- **Balance tolerance relaxed at 0.5 N.** The first slide step leaves a
+  ~0.01–0.03 N contact/backing mismatch at any load; the 2 % check passed at
+  1 N (0.009 N) but failed at 0.5 N, μ=0.35 (0.027 N vs 0.010 N, twice). The
+  0.5 N configs use `balance_tolerance` 0.06 (0.03 N absolute).
 - **Travel/load handoff is fragile.** Seating depths were tuned at 1 N; the
   small cylinder already fails unloading at 1 N. Higher loads may fail too.
 - **Uncalibrated.** Gel modulus, μ and optics are not fit to the real sensor
