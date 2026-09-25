@@ -42,9 +42,9 @@ the same steps, lift off.
 | 14 | `force_sweep/hemisphere_large_0p5n` | hemisphere r50 fine | 0.35 (resin_wax_coated) | force | 0.5 | 0.502 | 0.178 | done (2.7 h) | `indenter_slide_11x17_force_sweep/` |
 | 15 | `force_sweep/hemisphere_small_0p5n` | hemisphere r10 fine | 0.35 (resin_wax_coated) | force | 0.5 | 0.502 | 0.185 | done (3.2 h) | 〃 |
 | 16 | `force_sweep/cylinder_large_0p5n` | cylinder r50 fine top | 0.35 (resin_wax_coated) | force | 0.5 | 0.501 | 0.175 | done (0.9 h) | 〃 |
-| 17 | `force_sweep/hemisphere_large_2n` | hemisphere r50 fine | 0.35 (resin_wax_coated) | force | 2 |  |  | running | 〃 |
-| 18 | `force_sweep/hemisphere_small_2n` | hemisphere r10 fine | 0.35 (resin_wax_coated) | force | 2 |  |  | queued (rerun) | 〃 |
-| 19 | `force_sweep/cylinder_large_2n` | cylinder r50 fine top | 0.35 (resin_wax_coated) | force | 2 |  |  | queued (rerun) | 〃 |
+| 17 | `force_sweep/hemisphere_large_2n` | hemisphere r50 fine | 0.35 (resin_wax_coated) | force | 2 | 2.003 | 0.725 | done (4.9 h) | 〃 |
+| 18 | `force_sweep/hemisphere_small_2n` | hemisphere r10 fine | 0.35 (resin_wax_coated) | force | 2 |  |  | running | 〃 |
+| 19 | `force_sweep/cylinder_large_2n` | cylinder r50 fine top | 0.35 (resin_wax_coated) | force | 2 |  |  | running | 〃 |
 | 20 | `force_sweep/hemisphere_large_4n` | hemisphere r50 fine | 0.35 (resin_wax_coated) | force | 4 |  |  | queued | 〃 |
 | 21 | `force_sweep/hemisphere_small_4n` | hemisphere r10 fine | 0.35 (resin_wax_coated) | force | 4 |  |  | queued | 〃 |
 | 22 | `force_sweep/cylinder_large_4n` | cylinder r50 fine top | 0.35 (resin_wax_coated) | force | 4 |  |  | queued | 〃 |
