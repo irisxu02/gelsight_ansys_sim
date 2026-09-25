@@ -47,8 +47,16 @@ def free_port(start=50052, attempts=64):
     for port in range(start, start + attempts):
         with socket.socket() as probe:
             probe.settimeout(0.5)
-            if probe.connect_ex(("127.0.0.1", port)) != 0:
-                return port
+            if probe.connect_ex(("127.0.0.1", port)) == 0:
+                continue
+        # MAPDL 2026 R1 on Linux serves gRPC on this Unix socket, not the TCP port.
+        path = Path.home() / ".conn" / f"mapdl-{port}.sock"
+        if hasattr(socket, "AF_UNIX") and path.exists():
+            with socket.socket(socket.AF_UNIX) as probe:
+                probe.settimeout(0.5)
+                if probe.connect_ex(str(path)) == 0:
+                    continue
+        return port
     raise RuntimeError(
         f"No free solver port in {start}-{start + attempts - 1}; another "
         "solver may be running"
