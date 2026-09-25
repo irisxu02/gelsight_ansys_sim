@@ -1,0 +1,16 @@
+{
+  "config_kind": "object_material_case",
+  "name": "aluminum",
+  "calibrated": false,
+  "description": "Aluminum - typical aluminum alloy. Moderate stiffness, lightweight.",
+  "material": {
+    "model": "linear",
+    "young_pa": 70.0e9,
+    "poisson": 0.33,
+    "density_kg_m3": 2700
+  },
+  "contact": {
+    "friction_coefficient": 0.4,
+    "notes": "Typical aluminum alloy (e.g., 6061-T6). Lower friction than steel."
+  }
+}

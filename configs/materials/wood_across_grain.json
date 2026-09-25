@@ -1,0 +1,16 @@
+{
+  "config_kind": "object_material_case",
+  "name": "wood_across_grain",
+  "calibrated": false,
+  "description": "Wood - stiffness perpendicular to grain. Much softer than along grain.",
+  "material": {
+    "model": "linear",
+    "young_pa": 1.0e9,
+    "poisson": 0.40,
+    "density_kg_m3": 750
+  },
+  "contact": {
+    "friction_coefficient": 0.5,
+    "notes": "Significantly softer than along-grain direction; use for radial/tangential loading"
+  }
+}

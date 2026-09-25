@@ -1,0 +1,16 @@
+{
+  "config_kind": "object_material_case",
+  "name": "rubber",
+  "calibrated": false,
+  "description": "Natural rubber or rubber-like elastomer. Soft, deformable material.",
+  "material": {
+    "model": "neo_hookean",
+    "young_pa": 5.0e6,
+    "poisson": 0.49,
+    "density_kg_m3": 920
+  },
+  "contact": {
+    "friction_coefficient": 0.8,
+    "notes": "Soft hyperelastic material; Neo-Hookean model captures nonlinear behavior. High friction coefficient."
+  }
+}

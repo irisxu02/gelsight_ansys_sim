@@ -1,0 +1,16 @@
+{
+  "config_kind": "object_material_case",
+  "name": "fabric_cotton",
+  "calibrated": false,
+  "description": "Cotton fabric - woven textile. Anisotropic behavior approximated with linear material.",
+  "material": {
+    "model": "linear",
+    "young_pa": 0.2e9,
+    "poisson": 0.3,
+    "density_kg_m3": 450
+  },
+  "contact": {
+    "friction_coefficient": 0.7,
+    "notes": "Very soft material; linear model is approximate. Actual behavior is anisotropic (warp vs weft)."
+  }
+}
