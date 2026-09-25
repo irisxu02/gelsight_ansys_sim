@@ -301,7 +301,7 @@ ALLOCATION_KEYS = frozenset({"cores", "gpu", "require_gpu", "allow_unlisted_gpu"
 
 # Optics fields that scale with the camera resolution. The suite declares them
 # for the nominal sensor; with_render_scale derives the resolved values.
-SCALE_KEYS = ("marker_margin_px", "marker_radius_px")
+SCALE_KEYS = ("marker_margin_px", "marker_offset_px", "marker_radius_px")
 
 # Contact settings: the resolved Indenter field for each suite contact_numerics
 # key. The suite is the source; the indenter is what the adapter reads.

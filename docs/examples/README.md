@@ -67,10 +67,30 @@ See [sensor alignment](../sensor-alignment.md) for FOV and marker conventions.
 worked example, not a curated dataset preset (`"status":
 "capability_example"`; preset discovery and export leave it alone, so it
 carries no measured solve time here). It runs the same sphere-press
-trajectory as `sphere_press` on the unchanged nominal gel, but swaps in the
-denser 11 × 17 marker grid and a background image extracted from a second,
-supplied example sensor's raw capture instead of the stock Mini background.
-See [sensor alignment](../sensor-alignment.md#a-second-example-sensors-captured-background)
+trajectory as `sphere_press` on the unchanged nominal gel and the stock Mini
+background, but swaps in a denser 11 × 17 marker grid placed where a second,
+supplied example sensor's raw capture shows its dots.
+[`hemisphere_slide_11x17`](../../configs/hemisphere_slide_11x17.json) slides
+the large hemisphere under the same sensor at 0.5 N.
+[`indenter_slide_11x17`](../../configs/indenter_slide_11x17/) presses each of
+the four [indenter meshes](../../assets/meshes/README.md#indenters) to a
+commanded 1 N, slides it 2 mm along +x at 2.5 mm/s with the load held, then
+unloads. x is the sensor's long edge, and both cylinders lie along it, so they
+slide along their own length. The switch between travel and load control is
+stepped, so it only converges where the two nearly agree: the hemispheres are
+seated by travel at about 0.1-0.2 N rather than 2 µm past touch, and unloaded to
+0.03 N before lift-off; the small hemisphere, still 0.11 mm deep there, hands
+back to travel at that depth and ramps off. Each slide step integrates with
+mass, which puts a run at 1-4 hours.
+[`indenter_slide_11x17_fine`](../../configs/indenter_slide_11x17_fine/) runs
+the same four trials on the finer tessellations; only the mesh file differs.
+The fine small cylinder slides and holds 1 N, then fails the contact-backing
+force balance on the step down to 0.5 N (contact 0.44 N against 0.50 N at the
+backing, with or without stabilization damping), so
+[`cylinder_small_press`](../../configs/indenter_slide_11x17_fine/cylinder_small_press.json)
+covers its load and unload on their own: the same press, hold, unload and
+lift-off with the slide left out.
+See [sensor alignment](../sensor-alignment.md#a-second-example-sensors-marker-grid)
 for what was and was not derived from that capture.
 
 ## Trajectory conventions

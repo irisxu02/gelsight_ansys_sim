@@ -65,20 +65,22 @@ class AnsysGel(AnsysSession):
                 + ",".join(str(self.pilot + i + 1) for i in range(4)),
             ]
         commands += ["TSHAP,PILO", f"EN,{first_element + 1},{self.pilot}"]
-        if self.load_controlled:
-            # Every other pilot DOF stays prescribed; UZ is left free here and
-            # driven by D or F per solved step, whichever that step commands.
-            commands += [
-                f"D,{self.pilot},UX,0",
-                f"D,{self.pilot},UY,0",
-                f"D,{self.pilot},ROTX,0",
-                f"D,{self.pilot},ROTY,0",
-                f"D,{self.pilot},ROTZ,0",
-            ]
-            self.load_node = self.pilot
-        else:
-            commands.append(f"D,{self.pilot},ALL,0")
-        return commands
+        return commands + self.pilot_constraint_commands()
+
+    def pilot_constraint_commands(self):
+        """Hold the rigid target's pilot at its reference until a step moves it."""
+        if not self.load_controlled:
+            return [f"D,{self.pilot},ALL,0"]
+        # Every other pilot DOF stays prescribed; UZ is left free here and
+        # driven by D or F per solved step, whichever that step commands.
+        self.load_node = self.pilot
+        return [
+            f"D,{self.pilot},UX,0",
+            f"D,{self.pilot},UY,0",
+            f"D,{self.pilot},ROTX,0",
+            f"D,{self.pilot},ROTY,0",
+            f"D,{self.pilot},ROTZ,0",
+        ]
 
     def build(self):
         c, mesh = self.config, self.mesh

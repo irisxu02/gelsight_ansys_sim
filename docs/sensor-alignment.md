@@ -93,26 +93,36 @@ The default RGB uses a measured example-sensor background and optical table,
 rotated clockwise into landscape. Their [provenance](../src/gelsight_ansys/data/mini/PROVENANCE.md)
 is retained; those assets do not calibrate an individual device.
 
-## A second example sensor's captured background
+## A second example sensor's marker grid
 
 [`gelsight_custom_11x17`](../configs/gelsight_custom_11x17.json) is a worked
 example (`"status": "capability_example"`), not a curated dataset preset. It
-keeps the nominal straight gel, camera, and mesh unchanged and only replaces
-the appearance inputs:
+keeps the nominal straight gel, camera, mesh, and the Mini's optical background
+and response unchanged, and places its marker lattice where a supplied capture
+of the real sensor shows it:
 
 | Quantity | This preset |
 |---|---|
-| Marker layout | 11 rows × 17 columns, 187 markers - the same pitch, margins, and dot size as [`custom_gel_press`](#a-pad-that-narrows-towards-its-sensing-face) |
-| Background image | `optics.background_image`, frame 0 of a supplied 406-frame raw capture (`gs.npz`), not the stock Mini background |
-| Optical response table | Still Mini's `polycalib.npz`; no device-specific photometric calibration was fitted |
+| Marker layout | 11 rows × 17 columns, 187 markers |
+| Marker pitch | 14.6 px in both directions (about 0.85 mm on the nominal FOV) |
+| Marker margins | `[46.3, 42.9]` px (rows, columns) |
+| Marker offset | `optics.marker_offset_px` `[5.2, 4.5]` px: the captured grid sits right of and below the image center |
+| Dot size | `marker_radius_m` 0.2 mm, about 3.4 px |
+| Background image | The stock Mini background, in the same landscape orientation the Mini preset renders with |
+| Optical response table | Mini's `polycalib.npz`; no device-specific photometric calibration was fitted |
 
-Only the background pixels changed; the marker pitch was not independently
-measured from the capture. Automated marker-center detection on the raw
-frames did not converge on a clean, countable grid, so this preset reuses
-`custom_gel_press`'s already-declared 11 × 17 numbers rather than a value
-newly derived from the capture. See its
-[provenance](../assets/sensors/gelsight_custom_11x17/PROVENANCE.md) for how
-the background frame was chosen and what remains uncalibrated.
+`marker_offset_px` moves the whole lattice by `[rows, columns]` pixels, `+y`
+down the image, after the margins place it symmetrically. It defaults to
+`[0, 0]`, scales with `--render-scale`, and must not push an outer center past
+the image edge.
+
+The lattice was fitted to the 187 dot centers detected in frame 0 of the
+capture. A uniform, axis-aligned lattice matches them to 1.7 px mean and
+4.8 px worst case; the residual is the capture's slight perspective, which a
+uniform lattice cannot follow. The capture itself is not used as the
+background, because its photographed dots would double the synthetic ones. See
+the [provenance](../assets/sensors/gelsight_custom_11x17/PROVENANCE.md) for the
+fit and what remains uncalibrated.
 
 ## Pixel scale and projection
 
