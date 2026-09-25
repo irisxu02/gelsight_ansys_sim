@@ -40,7 +40,7 @@ the same steps, lift off.
 | 13 | `indenter_slide_11x17_fine/cylinder_small_press` | cylinder r10 fine | 0.5 (rigid) | force, no slide | 1 | – | – | done | 〃 |
 <!-- sweep rows: configs/indenter_slide_11x17_force_sweep/<indenter>_<F>n.json -> outputs/indenter_slide_11x17_force_sweep/ -->
 | 14 | `force_sweep/hemisphere_large_0p5n` | hemisphere r50 fine | 0.35 (resin_wax_coated) | force | 0.5 | 0.502 | 0.178 | done (2.7 h) | `indenter_slide_11x17_force_sweep/` |
-| 15 | `force_sweep/hemisphere_small_0p5n` | hemisphere r10 fine | 0.35 (resin_wax_coated) | force | 0.5 |  |  | running | 〃 |
+| 15 | `force_sweep/hemisphere_small_0p5n` | hemisphere r10 fine | 0.35 (resin_wax_coated) | force | 0.5 | 0.502 | 0.185 | done (3.2 h) | 〃 |
 | 16 | `force_sweep/cylinder_large_0p5n` | cylinder r50 fine top | 0.35 (resin_wax_coated) | force | 0.5 |  |  | queued | 〃 |
 | 17 | `force_sweep/hemisphere_large_2n` | hemisphere r50 fine | 0.35 (resin_wax_coated) | force | 2 |  |  | queued | 〃 |
 | 18 | `force_sweep/hemisphere_small_2n` | hemisphere r10 fine | 0.35 (resin_wax_coated) | force | 2 |  |  | queued | 〃 |
