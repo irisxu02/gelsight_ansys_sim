@@ -87,7 +87,7 @@
     "initial_substeps": 2,
     "maximum_substeps": 200,
     "iterations": 80,
-    "force_tolerance": 0.005,
+    "force_tolerance": 0.001,
     "balance_tolerance": 0.06,
     "newton_raphson": "unsymmetric",
     "force_norm": 1,

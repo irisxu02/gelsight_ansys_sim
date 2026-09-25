@@ -82,6 +82,14 @@ the same steps, lift off.
   ~0.01–0.03 N contact/backing mismatch at any load; the 2 % check passed at
   1 N (0.009 N) but failed at 0.5 N, μ=0.35 (0.027 N vs 0.010 N, twice). The
   0.5 N configs use `balance_tolerance` 0.06 (0.03 N absolute).
+- **Force tolerance 0.005 is too loose at μ=0.35.** Load steps converged in
+  2 substeps with the contact carrying up to 9 % less than the backing
+  (0.914 vs 1.0 N, hemisphere r50; 1.37 vs 1.5 N, cylinder r50; 1.43 vs 1.5 N
+  on the r10 hemisphere's first unload). Removing damping or slowing the ramp
+  5× changed nothing; `force_tolerance` 0.001 closes it (≤0.003 N to 2 N), so
+  rows 17–29 use 0.001. Rows 14–16 (0.5 N) ran at 0.005 and balanced. The
+  0.005 runs at μ=0.5 (rows 5–13) passed the 2 % check but may carry similar
+  ≤2 % force-label error on load-change frames.
 - **Travel/load handoff is fragile.** Seating depths were tuned at 1 N; the
   small cylinder already fails unloading at 1 N. Higher loads may fail too.
 - **Uncalibrated.** Gel modulus, μ and optics are not fit to the real sensor
