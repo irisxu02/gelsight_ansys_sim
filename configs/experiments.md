@@ -46,7 +46,7 @@ the same steps, lift off.
 | 18 | `force_sweep/hemisphere_small_2n` | hemisphere r10 fine | 0.35 (resin_wax_coated) | force | 2 | 2.001 | 0.783 | done (6.0 h) | 〃 |
 | 19 | `force_sweep/cylinder_large_2n` | cylinder r50 fine top | 0.35 (resin_wax_coated) | force | 2 | 2.002 | 0.701 | done (1.4 h) | 〃 |
 | 20 | `force_sweep/hemisphere_large_4n` | hemisphere r50 fine | 0.35 (resin_wax_coated) | force | 4 | 4.004 | 1.467 | done (5.0 h) | 〃 |
-| 21 | `force_sweep/hemisphere_small_4n` | hemisphere r10 fine | 0.35 (resin_wax_coated) | force | 4 |  |  | running | 〃 |
+| 21 | `force_sweep/hemisphere_small_4n` | hemisphere r10 fine | 0.35 (resin_wax_coated) | force | 4 | 4.004 | 1.576 | done (8.1 h) | 〃 |
 | 22 | `force_sweep/cylinder_large_4n` | cylinder r50 fine top | 0.35 (resin_wax_coated) | force | 4 |  |  | queued | 〃 |
 | 23 | `force_sweep/cylinder_small_0p5n` | cylinder r10 fine | 0.35 (resin_wax_coated) | force | 0.5 |  |  | queued | 〃 |
 | 24 | `force_sweep/cylinder_small_2n` | cylinder r10 fine | 0.35 (resin_wax_coated) | force | 2 |  |  | queued | 〃 |
