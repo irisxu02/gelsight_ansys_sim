@@ -52,14 +52,15 @@ the same steps, lift off.
 | 24 | `force_sweep/cylinder_small_2n` | cylinder r10 fine | 0.35 (resin_wax_coated) | force | 2 | 2.001 | 0.705 | done (1.4 h) | 〃 |
 | 25 | `force_sweep/cylinder_small_4n` | cylinder r10 fine | 0.35 (resin_wax_coated) | force | 4 | 4.002 | 1.416 | done (1.7 h) | 〃 |
 | 26 | `force_sweep/cylinder_small_1n` | cylinder r10 fine | 0.35 (resin_wax_coated) | force | 1 | 1.001 | 0.351 | done (1.2 h) | 〃 |
-| 27 | `force_sweep/hemisphere_large_1n` | hemisphere r50 fine | 0.35 (resin_wax_coated) | force | 1 |  |  | running | 〃 |
+| 27 | `force_sweep/hemisphere_large_1n` | hemisphere r50 fine | 0.35 (resin_wax_coated) | force | 1 | 1.001 | 0.359 | done (4.2 h) | 〃 |
 | 28 | `force_sweep/hemisphere_small_1n` | hemisphere r10 fine | 0.35 (resin_wax_coated) | force | 1 | 1.001 | 0.379 | done (5.5 h) | 〃 |
 | 29 | `force_sweep/cylinder_large_1n` | cylinder r50 fine top | 0.35 (resin_wax_coated) | force | 1 | 1.001 | 0.350 | done (1.3 h) | 〃 |
 
 ## Methodological concerns
 
-- **Material = one scalar μ.** Every finished slide is in full Coulomb slip
-  (Ft = μ·N to 3 digits). With constant μ, no stick-slip, no velocity
+- **Material = one scalar μ.** Every finished slide is in full Coulomb slip:
+  Ft/N = μ to 3 digits for cylinders; hemispheres add 3–12 % from gel
+  ploughing (0.36–0.39 at μ=0.35, most for r10). With constant μ, no stick-slip, no velocity
   dependence and no texture, "material" differences in the sim are a pure
   tangential-force scale; a learned latent can separate materials only by
   shear magnitude. Real surfaces differ in stick-slip, micro-vibration and
@@ -90,9 +91,13 @@ the same steps, lift off.
   rows 17–29 use 0.001. Rows 14–16 (0.5 N) ran at 0.005 and balanced. The
   0.005 runs at μ=0.5 (rows 5–13) passed the 2 % check but may carry similar
   ≤2 % force-label error on load-change frames.
-- **Travel/load handoff is fragile.** Seating depths were tuned at 1 N; the
-  small cylinder already fails unloading at 1 N. Higher loads may fail too.
+- **Travel/load handoff is fragile.** With `force_tolerance` 0.001 all 16
+  sweep runs load, slide and unload to 4 N (the r10 cylinder's 1 N unload now
+  passes). The r50 hemisphere's 1 N lift-off from 0.03 N distorted the gel,
+  so that config hands back to travel at 0.057 mm first (as r10 does); its
+  2 and 4 N configs lift off directly and passed.
 - **Uncalibrated.** Gel modulus, μ and optics are not fit to the real sensor
   (see `docs/live-sensor.md`); sim and real data should be aligned before
   pre-training claims.
-- **Throughput.** The license allows one MAPDL per user; runs are serial, 1–4 h each.
+- **Throughput.** The license allows one MAPDL per user; runs are serial,
+  0.9–8.1 h each (hemispheres slowest); the 16-run sweep took ~2.5 days.
