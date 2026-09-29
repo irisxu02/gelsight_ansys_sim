@@ -1,19 +1,3 @@
-Vary materials: friction parameters of indenter material
-
-Vary normal forces: 0.5N, 1N, 2N, 4N.
-Vary sliding speeds.
-Sliding distance can be about 1-3mm one way.
-
-Try back-and-forth back-and-forth (2 repeats) fast sliding motion to simulate vibrational signals.
----
-CLAUDE:
-
-Remember, the goal is to simulate tactile signals such that different materials can be differentiated and a latent tactile representation be learned as slip-perception pre-training for slip-aware robot manipulation. Real-world data will also be collected.
-
-Finish this doc with a table log of all the sliding trials and configs (outputs so far plus anything after this point).
-Raise any methodological concerns.
-Be concise and keep this doc bare bones.
-
 ## Sliding trial log
 
 All: 100 kPa Neo-Hookean gel, rigid indenter, 2 mm slide along +x at 2.5 mm/s
