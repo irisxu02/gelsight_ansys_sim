@@ -171,6 +171,27 @@ class SolverPortTests(unittest.TestCase):
             candidate = probe.getsockname()[1]
         self.assertEqual(free_port(candidate), candidate)
 
+    @unittest.skipUnless(hasattr(__import__("socket"), "AF_UNIX"), "Unix sockets")
+    def test_a_port_served_on_a_unix_socket_is_stepped_over(self):
+        import socket
+        import tempfile
+        from unittest import mock
+
+        from gelsight_ansys.ansys.session import free_port
+
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            candidate = probe.getsockname()[1]
+        with tempfile.TemporaryDirectory() as home:
+            (Path(home) / ".conn").mkdir()
+            path = Path(home) / ".conn" / f"mapdl-{candidate}.sock"
+            with mock.patch("pathlib.Path.home", return_value=Path(home)):
+                with socket.socket(socket.AF_UNIX) as held:
+                    held.bind(str(path))
+                    held.listen(1)
+                    self.assertNotEqual(free_port(candidate), candidate)
+                self.assertEqual(free_port(candidate), candidate)
+
     def test_no_free_port_says_so(self):
         import socket
 
